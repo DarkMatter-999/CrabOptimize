@@ -4,8 +4,8 @@
   "main": "index.js",
   "scripts": {
     "init": "node ./bin/init.js",
-    "start": "wp-scripts start",
-    "build": "wp-scripts build",
+    "start": "wp-scripts start --source-path=assets/src --output-path=assets/build",
+    "build": "wp-scripts build --source-path=assets/src --output-path=assets/build",
     "prepare": "husky",
     "lint": "npm-run-all --parallel lint:*",
     "lint:css": "wp-scripts lint-style",

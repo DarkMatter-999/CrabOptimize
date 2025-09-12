@@ -53,7 +53,10 @@ function generateEntries() {
 
 module.exports = {
 	...defaultConfig,
-	entry: generateEntries(),
+	entry: {
+		...defaultConfig.entry(),
+		...generateEntries(),
+	},
 	output: {
 		path: path.resolve( __dirname, 'assets/build' ),
 		filename: '[name].js',
