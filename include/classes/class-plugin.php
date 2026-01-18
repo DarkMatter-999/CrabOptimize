@@ -2,12 +2,12 @@
 /**
  * Main Plugin File for Plugin.
  *
- * @package DarkMatter_Package
+ * @package DM_Crab_Optimize
  */
 
-namespace DarkMatter_Plugin;
+namespace DM_Crab_Optimize;
 
-use DarkMatter_Plugin\Traits\Singleton;
+use DM_Crab_Optimize\Traits\Singleton;
 
 /**
  * Main Plugin File for the Plugin.
@@ -24,6 +24,5 @@ class Plugin {
 	 */
 	public function __construct() {
 		Assets::get_instance();
-		// `Blocks::get_instance();` // Comment this out when using custom blocks registered via Blocks class.
 	}
 }

@@ -4,10 +4,10 @@
  *
  * This file provides the definition of the Singleton trait for use elsewhere.
  *
- * @package DarkMatter_Package
+ * @package DM_Crab_Optimize
  **/
 
-namespace DarkMatter_Plugin\Traits;
+namespace DM_Crab_Optimize\Traits;
 
 trait Singleton {
 

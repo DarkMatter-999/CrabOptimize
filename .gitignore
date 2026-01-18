@@ -1,3 +1,5 @@
 node_modules/
 assets/build/
 vendor/
+wasm/pkg
+wasm/target

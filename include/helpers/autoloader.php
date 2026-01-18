@@ -4,15 +4,15 @@
  *
  * This file provides the autoloader for the Plugin.
  *
- * @package DarkMatter_Package
+ * @package DM_Crab_Optimize
  **/
 
-namespace DarkMatter_Plugin\Helpers;
+namespace DM_Crab_Optimize\Helpers;
 
 spl_autoload_register(
 	function ( $what ) {
 		$split = explode( '\\', $what );
-		if ( 'DarkMatter_Plugin' !== $split[0] ) {
+		if ( 'DM_Crab_Optimize' !== $split[0] ) {
 			return;
 		}
 		$base_dir = 'include/';
@@ -37,8 +37,8 @@ spl_autoload_register(
 
 		$file_path = implode( '', $split );
 
-		if ( file_exists( DMP_PLUGIN_PATH . $file_path ) ) {
-			include_once DMP_PLUGIN_PATH . $file_path;
+		if ( file_exists( DMCO_PLUGIN_PATH . $file_path ) ) {
+			include_once DMCO_PLUGIN_PATH . $file_path;
 		}
 	}
 );
