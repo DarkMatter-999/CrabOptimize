@@ -39,11 +39,14 @@ class Assets {
 	}
 
 	/**
-	 * Enqueues admin styles and scripts for the plugin.
+	 * Enqueue admin styles and scripts for the plugin.
 	 *
+	 * Loads the compiled CSS and JS assets for the admin interface.
+	 *
+	 * @param string $hook The current admin page hook suffix.
 	 * @return void
 	 */
-	public function enqueue_admin_assets() {
+	public function enqueue_admin_assets( $hook ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found
 		$style_asset = include DMCO_PLUGIN_PATH . 'assets/build/css/main.asset.php';
 		wp_enqueue_style(
 			'main-css',

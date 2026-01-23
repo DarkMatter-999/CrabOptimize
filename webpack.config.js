@@ -61,6 +61,16 @@ module.exports = {
 		path: path.resolve( __dirname, 'assets/build' ),
 		filename: '[name].js',
 	},
+	resolve: {
+		...defaultConfig.resolve,
+		extensions: [
+			'.tsx',
+			'.ts',
+			'.js',
+			'.jsx',
+			...defaultConfig.resolve.extensions,
+		],
+	},
 	plugins: [
 		...defaultConfig.plugins,
 		new RemoveEmptyScriptsPlugin( {

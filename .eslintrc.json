@@ -1,0 +1,11 @@
+{
+  "extends": [ "plugin:@wordpress/eslint-plugin/recommended" ],
+  "ignorePatterns": [
+    "node_modules/**",
+    "assets/build/**",
+    "wasm/pkg/**"
+  ],
+  "rules": {
+    "no-console": "warn"
+  }
+}
