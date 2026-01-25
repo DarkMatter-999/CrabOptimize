@@ -1,6 +1,4 @@
 import apiFetch from '@wordpress/api-fetch';
-// eslint-disable-next-line camelcase
-import init, { convert_to_avif } from '../../../wasm/pkg/craboptimize_wasm';
 
 /**
  * Configuration flag that determines whether to keep the original unoptimized
@@ -68,56 +66,85 @@ declare global {
 	}
 }
 
-/**
- * WASM helper – ensures the WebAssembly module is loaded before conversion.
- */
-let wasmReady = false;
+const worker = new Worker( new URL( './crab-worker.ts', import.meta.url ) );
 
 /**
- * Loads the WASM module if it hasn't been loaded yet.
- */
-const ensureWasm = async () => {
-	if ( ! wasmReady ) {
-		await init();
-		wasmReady = true;
-	}
-};
-
-/**
- * Converts an image `File` to AVIF using the WASM module.
- * Returns the original file if conversion fails or if the file is already AVIF.
+ * Convert an image `File` to AVIF format using the WASM module.
  *
- * @param file The image file to process.
- * @return A promise that resolves to the (potentially) converted `File`.
+ * The function validates that the input is an image and not already AVIF, reads
+ * the file into an `ArrayBuffer`, and delegates the conversion to a dedicated
+ * WebWorker. If the conversion succeeds, a new `File` containing the AVIF data
+ * is returned. When conversion fails, or the input is not a convertible image,
+ * the original `File` is resolved unchanged.
+ *
+ * @param file The image `File` to be processed.
+ * @return A `Promise` that resolves with either the converted AVIF `File` or
+ *          the original file when no conversion occurs.
  */
-const processFile = async ( file: File ): Promise< File > => {
+const processFile = ( file: File ): Promise< File > => {
 	if (
 		! ( file instanceof File ) ||
 		! file.type.startsWith( 'image/' ) ||
 		'image/avif' === file.type
 	) {
-		return file;
+		return Promise.resolve( file );
 	}
-	try {
+
+	return new Promise( ( resolve ) => {
 		console.group( `🦀 CrabOptimize: Converting ${ file.name }` );
-		await ensureWasm();
 
-		const input = new Uint8Array( await file.arrayBuffer() );
-		const start = performance.now();
-		const avif = convert_to_avif( input, 70.0, 10 );
-		const duration = ( performance.now() - start ) / 1000;
+		const reader = new FileReader();
 
-		const avifName = file.name.replace( /\.[^/.]+$/, '' ) + '.avif';
-		const avifFile = new File( [ avif ], avifName, { type: 'image/avif' } );
+		reader.onload = () => {
+			const fileBuffer = reader.result as ArrayBuffer;
 
-		console.log( `Time: ${ duration.toFixed( 2 ) }s` );
-		console.groupEnd();
-		return avifFile;
-	} catch ( err ) {
-		console.error( 'CrabOptimize: Failed', err );
-		console.groupEnd();
-		return file;
-	}
+			const handleMessage = ( e: MessageEvent ) => {
+				worker.removeEventListener( 'message', handleMessage );
+
+				if ( e.data.error ) {
+					console.error( 'CrabOptimize: Failed', e.data.error );
+					console.groupEnd();
+					resolve( file );
+					return;
+				}
+
+				const { avifBuffer, fileName, duration } = e.data;
+
+				const timeLabel =
+					'number' === typeof duration
+						? `${ duration.toFixed( 2 ) }s`
+						: 'unknown duration';
+
+				const avifFile = new File( [ avifBuffer ], fileName, {
+					type: 'image/avif',
+				} );
+
+				console.log( `Time: ${ timeLabel }` );
+				console.groupEnd();
+				resolve( avifFile );
+			};
+
+			worker.addEventListener( 'message', handleMessage );
+
+			worker.postMessage(
+				{
+					fileBuffer,
+					fileName: file.name,
+					quality: 70.0,
+					speed: 10,
+				},
+				[ fileBuffer ]
+			);
+		};
+
+		reader.onerror = () => {
+			console.error( 'CrabOptimize: FileReader error' );
+			console.groupEnd();
+			resolve( file );
+		};
+
+		reader.readAsArrayBuffer( file );
+	} );
 };
 
 /**
