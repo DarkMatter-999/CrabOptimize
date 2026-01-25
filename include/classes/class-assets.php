@@ -64,6 +64,18 @@ class Assets {
 			$script_asset['version'],
 			true
 		);
+
+		if ( 'upload.php' === $hook ) {
+			$script_asset = include DMCO_PLUGIN_PATH . 'assets/build/js/editor.asset.php';
+
+			wp_enqueue_script(
+				'editor-js',
+				DMCO_PLUGIN_URL . 'assets/build/js/editor.js',
+				$script_asset['dependencies'],
+				$script_asset['version'],
+				true
+			);
+		}
 	}
 
 	/**
