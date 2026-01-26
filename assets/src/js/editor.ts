@@ -117,104 +117,112 @@ const mediaUploadMiddleware = async ( options: any, next: any ) => {
 };
 
 /**
- * Classic editor – Plupload interceptor.
- * Hooks into the legacy uploader to process images before they are sent.
+ * Classic editor - Plupload interceptor.
+ * Hooks into the raw Plupload global to process images before they are sent.
  */
 const hookLegacyPlupload = () => {
-	if ( ! window.wp?.Uploader ) {
+	if ( ! ( window as any ).plupload ) {
 		return;
 	}
 
-	const proto = window.wp.Uploader.prototype;
-	const originalInit = proto.init;
+	const OriginalUploader = ( window as any ).plupload.Uploader;
 
-	proto.init = function ( this: any ) {
-		// eslint-disable-next-line prefer-rest-params
-		originalInit.apply( this, arguments as any );
-		const uploader = this.uploader as PluploadInstance;
-		if ( ! uploader ) {
+	( window as any ).plupload.Uploader = function ( settings: any ) {
+		const instance = new OriginalUploader( settings );
+
+		console.log( '🦀 CrabOptimize: Hooked to Uploader' );
+		setupUploaderEvents( instance );
+
+		return instance;
+	};
+
+	// Copy prototype and static properties to the new constructor
+	( window as any ).plupload.Uploader.prototype = OriginalUploader.prototype;
+	Object.assign( ( window as any ).plupload.Uploader, OriginalUploader );
+};
+
+/**
+ * Shared logic to bind CrabOptimize to ANY Plupload instance.
+ * @param uploader
+ */
+const setupUploaderEvents = ( uploader: PluploadInstance ) => {
+	if ( ! uploader || uploader._crabHooked ) {
+		return;
+	}
+	uploader._crabHooked = true;
+
+	// Inject meta flag for optimized files before upload
+	uploader.bind( 'BeforeUpload', ( up: any, file: any ) => {
+		if ( file._crabOptimized ) {
+			up.settings.multipart_params = {
+				...( up.settings.multipart_params || {} ),
+				is_crab_optimized: 'true',
+			};
+		}
+	} );
+
+	// Process newly added files
+	uploader.bind( 'FilesAdded', ( up: any, files: any[] ) => {
+		if ( up._processing ) {
 			return;
 		}
 
-		// Inject meta flag for optimized files before upload
-		uploader.bind( 'BeforeUpload', ( up, file ) => {
-			if ( ( file as any )._crabOptimized ) {
-				up.settings.multipart_params = {
-					...( up.settings.multipart_params || {} ),
-					is_crab_optimized: 'true',
-				};
-			} else {
-				// eslint-disable-next-line camelcase
-				const { is_crab_optimized, ...rest } =
-					up.settings.multipart_params ?? {};
-				up.settings.multipart_params = rest;
+		const queue: { plupload: any; native: File }[] = [];
+
+		files.forEach( ( f ) => {
+			const native = f.getNative ? f.getNative() : f.fileobj;
+			if (
+				native &&
+				native.type.startsWith( 'image/' ) &&
+				'image/avif' !== native.type &&
+				! f._crabOptimized
+			) {
+				queue.push( { plupload: f, native } );
 			}
 		} );
 
-		// Process newly added files
-		uploader.bind( 'FilesAdded', ( up, files ) => {
-			if ( ( up as any )._processing ) {
-				return;
-			}
+		if ( ! queue.length ) {
+			return;
+		}
 
-			const queue: { plupload: PluploadFile; native: File }[] = [];
+		up.stop();
+		up._processing = true;
 
-			files.forEach( ( f ) => {
-				const native = f.getNative();
-				if (
-					native &&
-					native.type.startsWith( 'image/' ) &&
-					'image/avif' !== native.type &&
-					! ( f as any )._crabOptimized
-				) {
-					queue.push( { plupload: f, native } );
+		if ( ! KEEP_UNOPTIMIZED_FILE ) {
+			queue.forEach( ( { plupload } ) => {
+				if ( plupload.attachment ) {
+					plupload.attachment.destroy();
 				}
+				up.removeFile( plupload );
 			} );
+			up.refresh();
+		}
 
-			if ( ! queue.length ) {
-				return;
-			}
-
-			up.stop();
-			( up as any )._processing = true;
-
-			if ( ! KEEP_UNOPTIMIZED_FILE ) {
-				queue.forEach( ( { plupload } ) => {
-					if ( ( plupload as any ).attachment ) {
-						( plupload as any ).attachment.destroy();
-					}
-					up.removeFile( plupload );
-				} );
-				up.refresh();
-			}
-
-			( async () => {
-				try {
-					// eslint-disable-next-line @typescript-eslint/no-unused-vars
-					for ( const { plupload, native } of queue ) {
-						const result = await processFile( native );
-						if ( 'image/avif' === result.type ) {
-							up.addFile( result, result.name );
-							const added = up.files[ up.files.length - 1 ];
-							if ( added ) {
-								( added as any )._crabOptimized = true;
-							}
-						} else if ( ! KEEP_UNOPTIMIZED_FILE ) {
-							up.addFile( native, native.name );
+		( async () => {
+			try {
+				for ( const { native } of queue ) {
+					const result = await processFile( native );
+					if ( 'image/avif' === result.type ) {
+						up.addFile( result, result.name );
+						const added = up.files[ up.files.length - 1 ];
+						if ( added ) {
+							added._crabOptimized = true;
 						}
+					} else if ( ! KEEP_UNOPTIMIZED_FILE ) {
+						up.addFile( native, native.name );
 					}
-				} finally {
-					( up as any )._processing = false;
-					up.refresh();
-					setTimeout( () => {
-						if ( up.files.length ) {
-							up.start();
-						}
-					}, 300 );
 				}
-			} )();
-		} );
-	};
+			} finally {
+				up._processing = false;
+				up.refresh();
+				setTimeout( () => {
+					if ( up.files.length ) {
+						up.start();
+					}
+				}, 300 );
+			}
+		} )();
+	} );
 };
 
 /**

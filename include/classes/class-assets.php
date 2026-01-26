@@ -65,7 +65,7 @@ class Assets {
 			true
 		);
 
-		if ( 'upload.php' === $hook ) {
+		if ( 'upload.php' === $hook || 'media-new.php' === $hook ) {
 			$script_asset = include DMCO_PLUGIN_PATH . 'assets/build/js/editor.asset.php';
 
 			wp_enqueue_script(

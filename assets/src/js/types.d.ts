@@ -48,7 +48,7 @@ export interface PluploadInstance {
 /**
  * Global window extension for WordPress uploader integration.
  */
-export declare global {
+declare global {
 	interface Window {
 		wp?: {
 			Uploader?: {
