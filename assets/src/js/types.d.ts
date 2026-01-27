@@ -46,7 +46,7 @@ export interface PluploadInstance {
 }
 
 /**
- * Global window extension for WordPress uploader integration.
+ * Global window extensions for WordPress uploader integration and media attachment view.
  */
 declare global {
 	interface Window {
@@ -54,6 +54,42 @@ declare global {
 			Uploader?: {
 				prototype: { init: () => void };
 			};
+			media?: {
+				view?: {
+					Attachment?: {
+						prototype: AttachmentView;
+					};
+				};
+			};
 		};
 	}
+}
+
+/*
+*  Minimal interfaces for global WP objects.
+*/
+
+/**
+ * Minimal representation of attachment metadata used by the uploader.
+ */
+interface AttachmentMeta {
+	is_crab_optimized?: string;
+	[key: string]: any;
+}
+
+/**
+ * Model for a WordPress media attachment, exposing a `get` method.
+ */
+interface AttachmentModel {
+	get( attribute: 'meta' ): AttachmentMeta;
+	get( attribute: string ): any;
+}
+
+/**
+ * View representation of a WordPress media attachment.
+ */
+interface AttachmentView {
+	el: HTMLElement;
+	model: AttachmentModel;
+	render(): AttachmentView;
 }

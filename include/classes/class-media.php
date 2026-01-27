@@ -30,6 +30,8 @@ class Media {
 		add_action( 'manage_media_custom_column', array( $this, 'display_optimized_column_content' ), 10, 2 );
 		add_filter( 'manage_upload_sortable_columns', array( $this, 'make_optimized_column_sortable' ) );
 		add_action( 'add_attachment', array( $this, 'save_crab_optimization_meta' ) );
+
+		add_filter( 'wp_prepare_attachment_for_js', array( $this, 'expose_meta_to_js' ), 10, 2 );
 	}
 
 	/**
@@ -93,5 +95,22 @@ class Media {
 		if ( isset( $_POST['is_crab_optimized'] ) && 'true' === $_POST['is_crab_optimized'] ) {
 			update_post_meta( $post_id, 'is_crab_optimized', 'true' );
 		}
+	}
+
+	/**
+	 * Makes the 'is_crab_optimized' meta accessible to the JS Media models.
+	 *
+	 * @param array   $response   Array of prepared attachment data.
+	 * @param WP_Post $attachment Attachment object.
+	 * @return array
+	 */
+	public function expose_meta_to_js( $response, $attachment ) {
+		if ( ! isset( $response['meta'] ) ) {
+			$response['meta'] = array();
+		}
+
+		$response['meta']['is_crab_optimized'] = get_post_meta( $attachment->ID, 'is_crab_optimized', true );
+
+		return $response;
 	}
 }

@@ -46,30 +46,32 @@ class Assets {
 	 * @param string $hook The current admin page hook suffix.
 	 * @return void
 	 */
-	public function enqueue_admin_assets( $hook ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found
-		$style_asset = include DMCO_PLUGIN_PATH . 'assets/build/css/main.asset.php';
-		wp_enqueue_style(
-			'main-css',
-			DMCO_PLUGIN_URL . 'assets/build/css/main.css',
-			$style_asset['dependencies'],
-			$style_asset['version']
-		);
+	public function enqueue_admin_assets( $hook ) {
+		if ( $this->is_media_hook( $hook ) ) {
+			$style_asset = include DMCO_PLUGIN_PATH . 'assets/build/css/main.asset.php';
+			wp_enqueue_style(
+				'dm-crap-opt-main-css',
+				DMCO_PLUGIN_URL . 'assets/build/css/main.css',
+				$style_asset['dependencies'],
+				$style_asset['version']
+			);
 
-		$script_asset = include DMCO_PLUGIN_PATH . 'assets/build/js/main.asset.php';
+				$script_asset = include DMCO_PLUGIN_PATH . 'assets/build/js/main.asset.php';
 
-		wp_enqueue_script(
-			'main-js',
-			DMCO_PLUGIN_URL . 'assets/build/js/main.js',
-			$script_asset['dependencies'],
-			$script_asset['version'],
-			true
-		);
+				wp_enqueue_script(
+					'dm-crab-opt-main-js',
+					DMCO_PLUGIN_URL . 'assets/build/js/main.js',
+					$script_asset['dependencies'],
+					$script_asset['version'],
+					true
+				);
+		}
 
 		if ( 'upload.php' === $hook || 'media-new.php' === $hook ) {
 			$script_asset = include DMCO_PLUGIN_PATH . 'assets/build/js/editor.asset.php';
 
 			wp_enqueue_script(
-				'editor-js',
+				'dm-crab-opt-editor-js',
 				DMCO_PLUGIN_URL . 'assets/build/js/editor.js',
 				$script_asset['dependencies'],
 				$script_asset['version'],
@@ -87,7 +89,7 @@ class Assets {
 		$style_asset = include DMCO_PLUGIN_PATH . 'assets/build/css/editor.asset.php';
 
 		wp_enqueue_style(
-			'editor-css',
+			'dm-crab-opt-editor-css',
 			DMCO_PLUGIN_URL . 'assets/build/css/editor.css',
 			$style_asset['dependencies'],
 			$style_asset['version']
@@ -96,10 +98,31 @@ class Assets {
 		$script_asset = include DMCO_PLUGIN_PATH . 'assets/build/js/editor.asset.php';
 
 		wp_enqueue_script(
-			'editor-js',
+			'dm-crab-opt-editor-js',
 			DMCO_PLUGIN_URL . 'assets/build/js/editor.js',
 			$script_asset['dependencies'],
 			$script_asset['version'],
+			true
+		);
+	}
+
+	/**
+	 * Determines whether the given admin page hook corresponds to a media-related screen.
+	 *
+	 * @param string $hook The current admin page hook suffix.
+	 * @return bool True if the hook matches a media-related admin page, false otherwise.
+	 */
+	private function is_media_hook( $hook ) {
+		return in_array(
+			$hook,
+			array(
+				'post.php',
+				'post-new.php',
+				'upload.php',
+				'media-new.php',
+				'widgets.php',
+				'site-editor.php',
+			),
 			true
 		);
 	}
