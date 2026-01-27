@@ -24,5 +24,6 @@ class Plugin {
 	 */
 	public function __construct() {
 		Assets::get_instance();
+		Media::get_instance();
 	}
 }

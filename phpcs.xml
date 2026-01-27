@@ -10,7 +10,7 @@
 	<rule ref="WordPress.WP.I18n">
 		<properties>
 			<property name="text_domain" type="array">
-				<element value="text-domain-1" />
+				<element value="dm-crab-optimize" />
 				<element value="text-domain-2" />
 			</property>
 		</properties>
