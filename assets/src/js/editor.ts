@@ -1,12 +1,14 @@
 import apiFetch from '@wordpress/api-fetch';
 
+import { CrabQueue } from './crab-queue';
+
 /**
  * Configuration flag that determines whether to keep the original unoptimized
  * image files. When `false` only the AVIF‑converted files are retained.
  */
 const KEEP_UNOPTIMIZED_FILE = false;
 
-const worker = new Worker( new URL( './crab-worker.ts', import.meta.url ) );
+const crabQueue = new CrabQueue();
 
 /**
  * Convert an image `File` to AVIF format using the WASM module.
@@ -30,60 +32,64 @@ const processFile = ( file: File ): Promise< File > => {
 		return Promise.resolve( file );
 	}
 
-	return new Promise( ( resolve ) => {
-		console.group( `🦀 CrabOptimize: Converting ${ file.name }` );
+	return crabQueue.add( async () => {
+		return new Promise( ( resolve ) => {
+			console.log( `🦀 CrabOptimize: Converting ${ file.name }` );
 
-		const reader = new FileReader();
+			const worker = new Worker(
+				new URL( './crab-worker.ts', import.meta.url )
+			);
+			const reader = new FileReader();
 
-		reader.onload = () => {
-			const fileBuffer = reader.result as ArrayBuffer;
+			reader.onload = () => {
+				const fileBuffer = reader.result as ArrayBuffer;
 
-			const handleMessage = ( e: MessageEvent ) => {
-				worker.removeEventListener( 'message', handleMessage );
+				const handleMessage = ( e: MessageEvent ) => {
+					worker.removeEventListener( 'message', handleMessage );
+					worker.terminate();
 
-				if ( e.data.error ) {
-					console.error( 'CrabOptimize: Failed', e.data.error );
-					console.groupEnd();
-					resolve( file );
-					return;
-				}
+					if ( e.data.error ) {
+						console.error( 'CrabOptimize: Failed', e.data.error );
+						resolve( file );
+						return;
+					}
 
-				const { avifBuffer, fileName, duration } = e.data;
+					const { avifBuffer, fileName, duration } = e.data;
 
-				const timeLabel =
-					'number' === typeof duration
-						? `${ duration.toFixed( 2 ) }s`
-						: 'unknown duration';
+					const timeLabel =
+						'number' === typeof duration
+							? `${ duration.toFixed( 2 ) }s`
+							: 'unknown duration';
 
-				const avifFile = new File( [ avifBuffer ], fileName, {
-					type: 'image/avif',
-				} );
+					const avifFile = new File( [ avifBuffer ], fileName, {
+						type: 'image/avif',
+					} );
 
-				console.log( `Time: ${ timeLabel }` );
-				console.groupEnd();
-				resolve( avifFile );
+					console.log( `Time: ${ timeLabel }` );
+					resolve( avifFile );
+				};
+
+				worker.addEventListener( 'message', handleMessage );
+
+				worker.postMessage(
+					{
+						fileBuffer,
+						fileName: file.name,
+						quality: 70.0,
+						speed: 10,
+					},
+					[ fileBuffer ]
+				);
 			};
 
-			worker.addEventListener( 'message', handleMessage );
+			reader.onerror = () => {
+				console.error( 'CrabOptimize: FileReader error' );
+				worker.terminate();
+				resolve( file );
+			};
 
-			worker.postMessage(
-				{
-					fileBuffer,
-					fileName: file.name,
-					quality: 70.0,
-					speed: 10,
-				},
-				[ fileBuffer ]
-			);
-		};
-
-		reader.onerror = () => {
-			console.error( 'CrabOptimize: FileReader error' );
-			console.groupEnd();
-			resolve( file );
-		};
-
-		reader.readAsArrayBuffer( file );
+			reader.readAsArrayBuffer( file );
+		} );
 	} );
 };
 
@@ -97,7 +103,7 @@ const processFile = ( file: File ): Promise< File > => {
  */
 const mediaUploadMiddleware = async ( options: any, next: any ) => {
 	if (
-		options.method === 'POST' &&
+		'POST' === options.method &&
 		options.path?.includes( '/wp/v2/media' ) &&
 		options.body instanceof FormData
 	) {
@@ -200,26 +206,42 @@ const setupUploaderEvents = ( uploader: PluploadInstance ) => {
 
 		( async () => {
 			try {
-				for ( const { native } of queue ) {
-					const result = await processFile( native );
-					if ( 'image/avif' === result.type ) {
-						up.addFile( result, result.name );
+				const results = await Promise.all(
+					queue.map( async ( item ) => {
+						const processed = await processFile( item.native );
+
+						if ( 'image/avif' === processed.type ) {
+							return {
+								file: processed,
+								success: true,
+							};
+						}
+
+						console.warn(
+							`CrabOptimize: Skipping ${ item.native.name } due to conversion failure.`
+						);
+						return { success: false };
+					} )
+				);
+
+				results.forEach( ( res ) => {
+					if ( res.success && res.file ) {
+						up.addFile( res.file, res.file.name );
 						const added = up.files[ up.files.length - 1 ];
 						if ( added ) {
 							added._crabOptimized = true;
 						}
-					} else if ( ! KEEP_UNOPTIMIZED_FILE ) {
-						up.addFile( native, native.name );
 					}
-				}
+				} );
+			} catch ( err ) {
+				console.error( 'CrabOptimize: Critical error in queue', err );
 			} finally {
 				up._processing = false;
 				up.refresh();
-				setTimeout( () => {
-					if ( up.files.length ) {
-						up.start();
-					}
-				}, 300 );
+
+				if ( up.files.length > 0 ) {
+					setTimeout( () => up.start(), 300 );
+				}
 			}
 		} )();
 	} );
