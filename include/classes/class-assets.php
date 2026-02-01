@@ -56,15 +56,17 @@ class Assets {
 				$style_asset['version']
 			);
 
-				$script_asset = include DMCO_PLUGIN_PATH . 'assets/build/js/main.asset.php';
+			$script_asset = include DMCO_PLUGIN_PATH . 'assets/build/js/main.asset.php';
 
-				wp_enqueue_script(
-					'dm-crab-opt-main-js',
-					DMCO_PLUGIN_URL . 'assets/build/js/main.js',
-					$script_asset['dependencies'],
-					$script_asset['version'],
-					true
-				);
+			wp_enqueue_script(
+				'dm-crab-opt-main-js',
+				DMCO_PLUGIN_URL . 'assets/build/js/main.js',
+				$script_asset['dependencies'],
+				$script_asset['version'],
+				true
+			);
+
+			$this->enqueue_settings_script();
 		}
 
 		if ( 'upload.php' === $hook || 'media-new.php' === $hook ) {
@@ -104,6 +106,8 @@ class Assets {
 			$script_asset['version'],
 			true
 		);
+
+		$this->enqueue_settings_script();
 	}
 
 	/**
@@ -122,8 +126,40 @@ class Assets {
 				'media-new.php',
 				'widgets.php',
 				'site-editor.php',
+				'media_page_dm-crab-optimize-settings',
 			),
 			true
+		);
+	}
+
+	/**
+	 * Enqueues the inline settings script used by the plugin.
+	 *
+	 * Registers an empty script handle and adds a localized settings object to the
+	 * global `window.dmCrabSettingsMain` variable.
+	 *
+	 * @return void
+	 */
+	private function enqueue_settings_script() {
+		wp_register_script(
+			'dm-crab-settings-main',
+			'',
+			array(),
+			'v1.0',
+			true
+		);
+
+		wp_enqueue_script( 'dm-crab-settings-main' );
+
+		wp_add_inline_script(
+			'dm-crab-settings-main',
+			'window.dmCrabSettingsMain = ' . wp_json_encode(
+				array(
+					'saveUnoptimized' => (int) get_option( 'dm_crab_optimize_keep_optimized', 0 ),
+					'showBadge'       => (int) get_option( 'dm_crab_optimize_show_badge', 0 ),
+				)
+			) . ';',
+			'before'
 		);
 	}
 }

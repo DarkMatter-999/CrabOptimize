@@ -1,6 +1,10 @@
 import { __ } from '@wordpress/i18n';
 
 document.addEventListener( 'DOMContentLoaded', () => {
+	if ( ! window?.dmCrabSettingsMain?.showBadge ) {
+		return;
+	}
+
 	if ( ! window.wp?.media?.view?.Attachment ) {
 		return;
 	}

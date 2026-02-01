@@ -6,7 +6,7 @@ import { CrabQueue } from './crab-queue';
  * Configuration flag that determines whether to keep the original unoptimized
  * image files. When `false` only the AVIF‑converted files are retained.
  */
-const KEEP_UNOPTIMIZED_FILE = false;
+const keepUnoptimizedFile = !! window?.dmCrabSettingsMain?.saveUnoptimized;
 
 const crabQueue = new CrabQueue();
 
@@ -108,7 +108,7 @@ const mediaUploadMiddleware = async ( options: any, next: any ) => {
 		options.body instanceof FormData
 	) {
 		const file = options.body.get( 'file' );
-		if ( file instanceof File && ! KEEP_UNOPTIMIZED_FILE ) {
+		if ( file instanceof File && ! keepUnoptimizedFile ) {
 			const processed = await processFile( file );
 			options.body.set( 'file', processed, processed.name );
 			if (
@@ -194,7 +194,7 @@ const setupUploaderEvents = ( uploader: PluploadInstance ) => {
 		up.stop();
 		up._processing = true;
 
-		if ( ! KEEP_UNOPTIMIZED_FILE ) {
+		if ( ! keepUnoptimizedFile ) {
 			queue.forEach( ( { plupload } ) => {
 				if ( plupload.attachment ) {
 					plupload.attachment.destroy();

@@ -7,3 +7,48 @@
 	width: 1.5em;
 	height: 1.5em;
 }
+
+.dm-crab-toggle-switch {
+	position: relative;
+	display: inline-block;
+	width: 60px;
+	height: 34px;
+}
+
+.dm-crab-toggle-switch input {
+	opacity: 0;
+	width: 0;
+	height: 0;
+}
+
+.dm-crab-slider {
+	position: absolute;
+	cursor: pointer;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: var(--wp-admin-theme-color-darker, #ccc);
+	transition: 0.2s;
+	border-radius: 34px;
+}
+
+.dm-crab-slider::before {
+	position: absolute;
+	content: "";
+	height: 26px;
+	width: 26px;
+	left: 4px;
+	bottom: 4px;
+	background-color: var(--wp-admin-theme-color-text, #fff);
+	transition: 0.2s;
+	border-radius: 50%;
+}
+
+.dm-crab-toggle-switch input:checked + .dm-crab-slider {
+	background-color: var(--wp-admin-theme-color, #2271b1);
+}
+
+.dm-crab-toggle-switch input:checked + .dm-crab-slider::before {
+	transform: translateX(26px);
+}
