@@ -157,6 +157,7 @@ class Assets {
 				array(
 					'saveUnoptimized' => (int) get_option( 'dm_crab_optimize_keep_optimized', 0 ),
 					'showBadge'       => (int) get_option( 'dm_crab_optimize_show_badge', 0 ),
+					'imageSizes'      => wp_get_registered_image_subsizes(),
 				)
 			) . ';',
 			'before'

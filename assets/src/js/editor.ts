@@ -1,6 +1,7 @@
 import apiFetch from '@wordpress/api-fetch';
 
 import { CrabQueue } from './crab-queue';
+import { calculateDimensions, getImageDimensions } from './utils';
 
 /**
  * Configuration flag that determines whether to keep the original unoptimized
@@ -19,11 +20,19 @@ const crabQueue = new CrabQueue();
  * is returned. When conversion fails, or the input is not a convertible image,
  * the original `File` is resolved unchanged.
  *
- * @param file The image `File` to be processed.
+ * @param file   The image `File` to be processed.
+ * @param width
+ * @param height
+ * @param crop
  * @return A `Promise` that resolves with either the converted AVIF `File` or
  *          the original file when no conversion occurs.
  */
-const processFile = ( file: File ): Promise< File > => {
+const processFile = (
+	file: File,
+	width?: number,
+	height?: number,
+	crop?: boolean
+): Promise< File > => {
 	if (
 		! ( file instanceof File ) ||
 		! file.type.startsWith( 'image/' ) ||
@@ -77,6 +86,9 @@ const processFile = ( file: File ): Promise< File > => {
 						fileName: file.name,
 						quality: 70.0,
 						speed: 10,
+						width: width || 0,
+						height: height || 0,
+						crop: crop || false,
 					},
 					[ fileBuffer ]
 				);
@@ -110,7 +122,80 @@ const mediaUploadMiddleware = async ( options: any, next: any ) => {
 		const file = options.body.get( 'file' );
 		if ( file instanceof File && ! keepUnoptimizedFile ) {
 			const processed = await processFile( file );
+
+			const originalDims = await getImageDimensions( file );
+			console.log(
+				`🦀 CrabOptimize: Original dimensions ${ originalDims.w }x${ originalDims.h }`
+			);
+
+			const imageSizes = window?.dmCrabSettingsMain?.imageSizes || {};
+
+			const sizesToGenerate = Object.entries( imageSizes ).map(
+				( [ name, config ]: [ string, any ] ) => ( {
+					name,
+					width: parseInt( config.width, 10 ),
+					height: parseInt( config.height, 10 ),
+					crop: !! config.crop,
+				} )
+			);
+
+			const thumbnailPromises = sizesToGenerate.map( async ( size ) => {
+				const { width, height } = calculateDimensions(
+					originalDims.w,
+					originalDims.h,
+					size.width,
+					size.height,
+					size.crop
+				);
+
+				if (
+					! size.crop &&
+					originalDims.w <= width &&
+					originalDims.h <= height
+				) {
+					console.log(
+						`🦀 CrabOptimize: Skipping ${ size.name } (too small)`
+					);
+					return null;
+				}
+
+				console.log(
+					`🦀 CrabOptimize: Generating ${ size.name } (${ width }x${ height })`
+				);
+
+				const thumbFile = await processFile(
+					file,
+					width,
+					height,
+					size.crop
+				);
+				const buffer = await thumbFile.arrayBuffer();
+
+				const uint8view = new Uint8Array( buffer );
+				let binary = '';
+				for ( let i = 0; i < uint8view.length; i++ ) {
+					binary += String.fromCharCode( uint8view[ i ] );
+				}
+				const base64 = btoa( binary );
+
+				return {
+					size: size.name,
+					width,
+					height,
+					data: base64,
+				};
+			} );
+
+			const thumbnails = (
+				await Promise.all( thumbnailPromises )
+			).filter( ( t ) => t !== null );
+
 			options.body.set( 'file', processed, processed.name );
+			options.body.append(
+				'crab_thumbnails',
+				JSON.stringify( thumbnails )
+			);
+
 			if (
 				'image/avif' === processed.type &&
 				'image/avif' !== file.type

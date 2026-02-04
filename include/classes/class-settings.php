@@ -70,6 +70,16 @@ class Settings {
 				'default'           => 0,
 			)
 		);
+
+		register_setting(
+			'dm_crab_optimize_settings_group',
+			'dm_crab_optimize_generate_thumbnails',
+			array(
+				'type'              => 'integer',
+				'sanitize_callback' => 'absint',
+				'default'           => 0,
+			)
+		);
 	}
 
 	/**
@@ -101,6 +111,15 @@ class Settings {
 					<td>
 						<label class="dm-crab-toggle-switch">
 							<input type="checkbox" name="dm_crab_optimize_show_badge" value="1" <?php checked( get_option( 'dm_crab_optimize_show_badge' ), 1 ); ?> />
+							<span class="dm-crab-slider"></span>
+						</label>
+					</td>
+					</tr>
+					<tr valign="top">
+					<th scope="row"><?php esc_html_e( 'Generate Thumbnails on frontend', 'dm-crab-optimize' ); ?></th>
+					<td>
+						<label class="dm-crab-toggle-switch">
+							<input type="checkbox" name="dm_crab_optimize_generate_thumbnails" value="1" <?php checked( get_option( 'dm_crab_optimize_generate_thumbnails' ), 1 ); ?> />
 							<span class="dm-crab-slider"></span>
 						</label>
 					</td>

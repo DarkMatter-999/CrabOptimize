@@ -30,7 +30,8 @@ class Media {
 		add_action( 'manage_media_custom_column', array( $this, 'display_optimized_column_content' ), 10, 2 );
 		add_filter( 'manage_upload_sortable_columns', array( $this, 'make_optimized_column_sortable' ) );
 		add_action( 'add_attachment', array( $this, 'save_crab_optimization_meta' ) );
-
+		add_filter( 'intermediate_image_sizes_advanced', array( $this, 'disable_image_thumbnails' ), 10, 3 );
+		add_filter( 'wp_generate_attachment_metadata', array( $this, 'handle_thumbnails' ), 10, 2 );
 		add_filter( 'wp_prepare_attachment_for_js', array( $this, 'expose_meta_to_js' ), 10, 2 );
 	}
 
@@ -105,12 +106,96 @@ class Media {
 	 * @return array
 	 */
 	public function expose_meta_to_js( $response, $attachment ) {
-		if ( ! isset( $response['meta'] ) ) {
+		if ( empty( $response['meta'] ) || ! is_array( $response['meta'] ) ) {
 			$response['meta'] = array();
 		}
 
 		$response['meta']['is_crab_optimized'] = get_post_meta( $attachment->ID, 'is_crab_optimized', true );
 
 		return $response;
+	}
+
+	/**
+	 * Disable generation of intermediate image sizes for AVIF attachments.
+	 *
+	 * @param array $sizes        Array of image sizes that would be generated.
+	 * @param array $metadata     Attachment metadata array.
+	 * @param int   $attachment_id Attachment post ID.
+	 * @return array Modified list of sizes (empty for AVIF).
+	 */
+	public function disable_image_thumbnails( $sizes, $metadata, $attachment_id ) {
+		$mime_type = get_post_mime_type( $attachment_id );
+
+		if ( 'image/avif' === $mime_type ) {
+			return array();
+		}
+
+		return $sizes;
+	}
+
+	/**
+	 * Handle creation of AVIF thumbnail files when the upload request includes them.
+	 *
+	 * This method checks the request context (Plupload or REST API), verifies that
+	 * the required fields are present, decodes the base‑64 image data and writes the
+	 * thumbnail files to the uploads directory. It then adds the generated sizes
+	 * to the attachment metadata array.
+	 *
+	 * @param array $metadata     Existing attachment metadata.
+	 * @param int   $attachment_id Attachment post ID.
+	 * @return array Updated metadata including any AVIF thumbnails.
+	 */
+	public function handle_thumbnails( $metadata, $attachment_id ) {
+		$is_plupload = isset( $_REQUEST['_wpnonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_REQUEST['_wpnonce'] ) ), 'media-form' );
+
+		$is_rest_api = defined( 'REST_REQUEST' ) && REST_REQUEST;
+
+		if ( ! $is_plupload && ! $is_rest_api ) {
+			return $metadata;
+		}
+
+		if ( ! isset( $_REQUEST['is_crab_optimized'] ) || ! isset( $_REQUEST['crab_thumbnails'] ) ) {
+			return $metadata;
+		}
+
+		$crab_thumbnails_raw = isset( $_REQUEST['crab_thumbnails'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['crab_thumbnails'] ) ) : '';
+		$thumbnails          = json_decode( $crab_thumbnails_raw, true );
+		if ( empty( $thumbnails ) ) {
+			return $metadata;
+		}
+
+		$file_path  = get_attached_file( $attachment_id );
+		$upload_dir = dirname( $file_path );
+		$base_name  = pathinfo( $file_path, PATHINFO_FILENAME );
+
+		foreach ( $thumbnails as $thumb ) {
+			$size_name = sanitize_text_field( $thumb['size'] );
+			$width     = intval( $thumb['width'] );
+			$height    = intval( $thumb['height'] );
+
+			$thumb_filename = "{$base_name}-{$width}x{$height}.avif";
+			$thumb_path     = "{$upload_dir}/{$thumb_filename}";
+
+			global $wp_filesystem;
+			if ( empty( $wp_filesystem ) ) {
+				require_once ABSPATH . 'wp-admin/includes/file.php';
+				WP_Filesystem();
+			}
+
+			$decoded_data = base64_decode( $thumb['data'] ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
+
+			if ( $wp_filesystem && $wp_filesystem->put_contents( $thumb_path, $decoded_data, FS_CHMOD_FILE ) === false ) {
+				return $metadata;
+			}
+
+			$metadata['sizes'][ $size_name ] = array(
+				'file'      => $thumb_filename,
+				'width'     => $width,
+				'height'    => $height,
+				'mime-type' => 'image/avif',
+			);
+		}
+
+		return $metadata;
 	}
 }

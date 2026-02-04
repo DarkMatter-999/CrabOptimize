@@ -1,8 +1,12 @@
 /**
  * Load the WebAssembly module and expose the AVIF conversion function.
  */
-// eslint-disable-next-line camelcase
-import init, { convert_to_avif } from '../../../wasm/pkg/craboptimize_wasm';
+import init, {
+	// eslint-disable-next-line camelcase
+	convert_to_avif,
+	// eslint-disable-next-line camelcase
+	convert_to_avif_resize,
+} from '../../../wasm/pkg/craboptimize_wasm';
 
 let wasmReady = false;
 
@@ -20,7 +24,8 @@ let wasmReady = false;
  *                         - An object with an `error` property if conversion fails.
  */
 self.onmessage = async ( e: MessageEvent ) => {
-	const { fileBuffer, fileName, quality, speed } = e.data;
+	const { fileBuffer, fileName, quality, speed, width, height, crop } =
+		e.data;
 
 	if ( ! wasmReady ) {
 		await init();
@@ -30,7 +35,21 @@ self.onmessage = async ( e: MessageEvent ) => {
 	try {
 		const input = new Uint8Array( fileBuffer );
 		const start = performance.now();
-		const avif = convert_to_avif( input, quality, speed );
+
+		let avif;
+		if ( width > 0 && height > 0 ) {
+			avif = convert_to_avif_resize(
+				input,
+				quality,
+				speed,
+				width,
+				height,
+				crop
+			);
+		} else {
+			avif = convert_to_avif( input, quality, speed );
+		}
+
 		const duration = ( performance.now() - start ) / 1000;
 
 		self.postMessage(
