@@ -5,7 +5,7 @@ import { calculateDimensions, getImageDimensions } from './utils';
 
 /**
  * Configuration flag that determines whether to keep the original unoptimized
- * image files. When `false` only the AVIF‑converted files are retained.
+ * image files. When `false` only the AVIF-converted files are retained.
  */
 const keepUnoptimizedFile = !! window?.dmCrabSettingsMain?.saveUnoptimized;
 
@@ -106,6 +106,83 @@ const processFile = (
 };
 
 /**
+ * Generates AVIF thumbnails for various sizes based on the provided file.
+ *
+ * @param {File}                     file           - The original image File.
+ * @param {{ w: number; h: number }} originalDims   - Object containing the original image dimensions (width `w` and height `h`).
+ * @param                            originalDims.w
+ * @param                            originalDims.h
+ * @param {Record<string, any>}      imageSizes     - Object containing WordPress‑style image size configurations.
+ * @return {Promise<Array<{ size: string; width: number; height: number; data: string }>>}
+ *          A promise that resolves to an array of thumbnail objects.
+ */
+const generateThumbnails = async (
+	file: File,
+	originalDims: { w: number; h: number },
+	imageSizes: Record< string, any >
+) => {
+	if ( ! imageSizes ) {
+		return [];
+	}
+
+	const sizesToGenerate = Object.entries( imageSizes ).map(
+		( [ name, config ]: [ string, any ] ) => ( {
+			name,
+			width: parseInt( config.width, 10 ),
+			height: parseInt( config.height, 10 ),
+			crop: !! config.crop,
+		} )
+	);
+
+	const thumbnailPromises = sizesToGenerate.map( async ( size ) => {
+		const { width, height } = calculateDimensions(
+			originalDims.w,
+			originalDims.h,
+			size.width,
+			size.height,
+			size.crop
+		);
+
+		if (
+			! size.crop &&
+			originalDims.w <= width &&
+			originalDims.h <= height
+		) {
+			console.log(
+				`🦀 CrabOptimize: Skipping ${ size.name } (too small)`
+			);
+			return null;
+		}
+
+		console.log(
+			`🦀 CrabOptimize: Generating ${ size.name } (${ width }x${ height })`
+		);
+
+		const thumbFile = await processFile( file, width, height, size.crop );
+
+		const base64 = await new Promise< string >( ( resolve ) => {
+			const reader = new FileReader();
+			reader.onloadend = () => {
+				const res = reader.result as string;
+				// Remove the Data URL prefix (data:image/avif;base64,)
+				resolve( res.split( ',' )[ 1 ] );
+			};
+			reader.readAsDataURL( thumbFile );
+		} );
+
+		return {
+			size: size.name,
+			width,
+			height,
+			data: base64,
+		};
+	} );
+
+	const results = await Promise.all( thumbnailPromises );
+	return results.filter( ( t ) => t !== null );
+};
+
+/**
  * API fetch middleware for the Block editor.
  * Intercepts media uploads, runs image conversion, and appends metadata.
  *
@@ -130,65 +207,11 @@ const mediaUploadMiddleware = async ( options: any, next: any ) => {
 
 			const imageSizes = window?.dmCrabSettingsMain?.imageSizes || {};
 
-			const sizesToGenerate = Object.entries( imageSizes ).map(
-				( [ name, config ]: [ string, any ] ) => ( {
-					name,
-					width: parseInt( config.width, 10 ),
-					height: parseInt( config.height, 10 ),
-					crop: !! config.crop,
-				} )
+			const thumbnails = await generateThumbnails(
+				file,
+				originalDims,
+				imageSizes
 			);
-
-			const thumbnailPromises = sizesToGenerate.map( async ( size ) => {
-				const { width, height } = calculateDimensions(
-					originalDims.w,
-					originalDims.h,
-					size.width,
-					size.height,
-					size.crop
-				);
-
-				if (
-					! size.crop &&
-					originalDims.w <= width &&
-					originalDims.h <= height
-				) {
-					console.log(
-						`🦀 CrabOptimize: Skipping ${ size.name } (too small)`
-					);
-					return null;
-				}
-
-				console.log(
-					`🦀 CrabOptimize: Generating ${ size.name } (${ width }x${ height })`
-				);
-
-				const thumbFile = await processFile(
-					file,
-					width,
-					height,
-					size.crop
-				);
-				const buffer = await thumbFile.arrayBuffer();
-
-				const uint8view = new Uint8Array( buffer );
-				let binary = '';
-				for ( let i = 0; i < uint8view.length; i++ ) {
-					binary += String.fromCharCode( uint8view[ i ] );
-				}
-				const base64 = btoa( binary );
-
-				return {
-					size: size.name,
-					width,
-					height,
-					data: base64,
-				};
-			} );
-
-			const thumbnails = (
-				await Promise.all( thumbnailPromises )
-			).filter( ( t ) => t !== null );
 
 			options.body.set( 'file', processed, processed.name );
 			options.body.append(
@@ -248,6 +271,9 @@ const setupUploaderEvents = ( uploader: PluploadInstance ) => {
 			up.settings.multipart_params = {
 				...( up.settings.multipart_params || {} ),
 				is_crab_optimized: 'true',
+				crab_thumbnails: file._crabThumbnails
+					? JSON.stringify( file._crabThumbnails )
+					: '',
 			};
 		}
 	} );
@@ -295,9 +321,26 @@ const setupUploaderEvents = ( uploader: PluploadInstance ) => {
 					queue.map( async ( item ) => {
 						const processed = await processFile( item.native );
 
+						const originalDims = await getImageDimensions(
+							item.native
+						);
+						console.log(
+							`🦀 CrabOptimize: Original dimensions ${ originalDims.w }x${ originalDims.h }`
+						);
+
+						const imageSizes =
+							window?.dmCrabSettingsMain?.imageSizes || {};
+
+						const thumbnails = await generateThumbnails(
+							item.native,
+							originalDims,
+							imageSizes
+						);
+
 						if ( 'image/avif' === processed.type ) {
 							return {
 								file: processed,
+								thumbnails,
 								success: true,
 							};
 						}
@@ -315,6 +358,7 @@ const setupUploaderEvents = ( uploader: PluploadInstance ) => {
 						const added = up.files[ up.files.length - 1 ];
 						if ( added ) {
 							added._crabOptimized = true;
+							added._crabThumbnails = res.thumbnails;
 						}
 					}
 				} );
