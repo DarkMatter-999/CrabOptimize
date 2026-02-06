@@ -155,9 +155,10 @@ class Assets {
 			'dm-crab-settings-main',
 			'window.dmCrabSettingsMain = ' . wp_json_encode(
 				array(
-					'saveUnoptimized' => (int) get_option( 'dm_crab_optimize_keep_optimized', 0 ),
-					'showBadge'       => (int) get_option( 'dm_crab_optimize_show_badge', 0 ),
-					'imageSizes'      => wp_get_registered_image_subsizes(),
+					'saveUnoptimized'    => (int) get_option( 'dm_crab_optimize_keep_optimized', 0 ),
+					'showBadge'          => (int) get_option( 'dm_crab_optimize_show_badge', 0 ),
+					'imageSizes'         => wp_get_registered_image_subsizes(),
+					'generateThumbnails' => (int) get_option( 'dm_crab_optimize_generate_thumbnails', 0 ),
 				)
 			) . ';',
 			'before'

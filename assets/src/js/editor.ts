@@ -7,7 +7,15 @@ import { calculateDimensions, getImageDimensions } from './utils';
  * Configuration flag that determines whether to keep the original unoptimized
  * image files. When `false` only the AVIF-converted files are retained.
  */
-const keepUnoptimizedFile = !! window?.dmCrabSettingsMain?.saveUnoptimized;
+const keepUnoptimizedFile = () =>
+	!! window?.dmCrabSettingsMain?.saveUnoptimized;
+
+/**
+ * Configuration flag that enables thumbnail generation.
+ * Defaults to `false` when the setting is missing or falsy.
+ */
+const isGenerateThumbnailsEnabled = () =>
+	!! window?.dmCrabSettingsMain?.generateThumbnails;
 
 const crabQueue = new CrabQueue();
 
@@ -121,6 +129,10 @@ const generateThumbnails = async (
 	originalDims: { w: number; h: number },
 	imageSizes: Record< string, any >
 ) => {
+	if ( ! isGenerateThumbnailsEnabled() ) {
+		return [];
+	}
+
 	if ( ! imageSizes ) {
 		return [];
 	}
@@ -197,7 +209,7 @@ const mediaUploadMiddleware = async ( options: any, next: any ) => {
 		options.body instanceof FormData
 	) {
 		const file = options.body.get( 'file' );
-		if ( file instanceof File && ! keepUnoptimizedFile ) {
+		if ( file instanceof File && ! keepUnoptimizedFile() ) {
 			const processed = await processFile( file );
 
 			const originalDims = await getImageDimensions( file );
@@ -214,10 +226,13 @@ const mediaUploadMiddleware = async ( options: any, next: any ) => {
 			);
 
 			options.body.set( 'file', processed, processed.name );
-			options.body.append(
-				'crab_thumbnails',
-				JSON.stringify( thumbnails )
-			);
+
+			if ( thumbnails.length > 0 ) {
+				options.body.append(
+					'crab_thumbnails',
+					JSON.stringify( thumbnails )
+				);
+			}
 
 			if (
 				'image/avif' === processed.type &&
@@ -305,7 +320,7 @@ const setupUploaderEvents = ( uploader: PluploadInstance ) => {
 		up.stop();
 		up._processing = true;
 
-		if ( ! keepUnoptimizedFile ) {
+		if ( ! keepUnoptimizedFile() ) {
 			queue.forEach( ( { plupload } ) => {
 				if ( plupload.attachment ) {
 					plupload.attachment.destroy();
@@ -358,7 +373,9 @@ const setupUploaderEvents = ( uploader: PluploadInstance ) => {
 						const added = up.files[ up.files.length - 1 ];
 						if ( added ) {
 							added._crabOptimized = true;
-							added._crabThumbnails = res.thumbnails;
+							if ( res?.thumbnails?.length > 0 ) {
+								added._crabThumbnails = res.thumbnails;
+							}
 						}
 					}
 				} );

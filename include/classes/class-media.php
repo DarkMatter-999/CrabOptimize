@@ -124,6 +124,10 @@ class Media {
 	 * @return array Modified list of sizes (empty for AVIF).
 	 */
 	public function disable_image_thumbnails( $sizes, $metadata, $attachment_id ) {
+		if ( ! get_option( 'dm_crab_optimize_generate_thumbnails', 0 ) ) {
+			return $sizes;
+		}
+
 		$mime_type = get_post_mime_type( $attachment_id );
 
 		if ( 'image/avif' === $mime_type ) {
@@ -146,6 +150,10 @@ class Media {
 	 * @return array Updated metadata including any AVIF thumbnails.
 	 */
 	public function handle_thumbnails( $metadata, $attachment_id ) {
+		if ( ! get_option( 'dm_crab_optimize_generate_thumbnails', 0 ) ) {
+			return $metadata;
+		}
+
 		$is_plupload = isset( $_REQUEST['_wpnonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_REQUEST['_wpnonce'] ) ), 'media-form' );
 
 		$is_rest_api = defined( 'REST_REQUEST' ) && REST_REQUEST;
