@@ -3,3 +3,6 @@ assets/build/
 vendor/
 wasm/pkg
 wasm/target
+.wp-env/
+.wp-env.json.custom
+*.log
