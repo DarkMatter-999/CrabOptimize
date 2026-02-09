@@ -80,6 +80,48 @@ class Settings {
 				'default'           => 0,
 			)
 		);
+
+		register_setting(
+			'dm_crab_optimize_settings_group',
+			'dm_crab_optimize_quality',
+			array(
+				'type'              => 'number',
+				'sanitize_callback' => array( $this, 'sanitize_quality' ),
+				'default'           => 70,
+			)
+		);
+
+		register_setting(
+			'dm_crab_optimize_settings_group',
+			'dm_crab_optimize_speed',
+			array(
+				'type'              => 'integer',
+				'sanitize_callback' => array( $this, 'sanitize_speed' ),
+				'default'           => 10,
+			)
+		);
+	}
+
+	/**
+	 * Sanitize quality setting - ensure it's between 0 and 100.
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return float The sanitized quality value.
+	 */
+	public function sanitize_quality( $value ) {
+		$quality = floatval( $value );
+		return max( 0, min( 100, $quality ) );
+	}
+
+	/**
+	 * Sanitize speed setting - ensure it's between 0 and 10.
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return int The sanitized speed value.
+	 */
+	public function sanitize_speed( $value ) {
+		$speed = intval( $value );
+		return max( 0, min( 10, $speed ) );
 	}
 
 	/**
@@ -98,7 +140,7 @@ class Settings {
 				?>
 				<table class="form-table">
 					<tr valign="top">
-					<th scope="row"><?php esc_html_e( 'Keep Optimized Images', 'dm-crab-optimize' ); ?></th>
+					<th scope="row"><?php esc_html_e( 'Keep Unoptimized Images', 'dm-crab-optimize' ); ?></th>
 					<td>
 						<label class="dm-crab-toggle-switch">
 							<input type="checkbox" name="dm_crab_optimize_keep_optimized" value="1" <?php checked( get_option( 'dm_crab_optimize_keep_optimized' ), 1 ); ?> />
@@ -122,6 +164,20 @@ class Settings {
 							<input type="checkbox" name="dm_crab_optimize_generate_thumbnails" value="1" <?php checked( get_option( 'dm_crab_optimize_generate_thumbnails' ), 1 ); ?> />
 							<span class="dm-crab-slider"></span>
 						</label>
+					</td>
+					</tr>
+					<tr valign="top">
+					<th scope="row"><label for="dm_crab_optimize_quality"><?php esc_html_e( 'Image Quality', 'dm-crab-optimize' ); ?></label></th>
+					<td>
+						<input type="number" id="dm_crab_optimize_quality" name="dm_crab_optimize_quality" min="0" max="100" value="<?php echo esc_attr( get_option( 'dm_crab_optimize_quality', 70 ) ); ?>" />
+						<p class="description"><?php esc_html_e( 'AVIF quality level (0-100). Higher values produce better quality but larger files. Default: 70', 'dm-crab-optimize' ); ?></p>
+					</td>
+					</tr>
+					<tr valign="top">
+					<th scope="row"><label for="dm_crab_optimize_speed"><?php esc_html_e( 'Compression Speed', 'dm-crab-optimize' ); ?></label></th>
+					<td>
+						<input type="number" id="dm_crab_optimize_speed" name="dm_crab_optimize_speed" min="0" max="10" value="<?php echo esc_attr( get_option( 'dm_crab_optimize_speed', 10 ) ); ?>" />
+						<p class="description"><?php esc_html_e( 'Compression speed (0-10). Lower values produce smaller files but take longer. Default: 10', 'dm-crab-optimize' ); ?></p>
 					</td>
 					</tr>
 				</table>

@@ -17,6 +17,30 @@ const keepUnoptimizedFile = () =>
 const isGenerateThumbnailsEnabled = () =>
 	!! window?.dmCrabSettingsMain?.generateThumbnails;
 
+/**
+ * Get the AVIF quality setting.
+ * Defaults to 70. Valid range: 0-100.
+ */
+const getQualitySetting = () => {
+	const quality = window?.dmCrabSettingsMain?.quality;
+	if ( 'number' === typeof quality ) {
+		return Math.max( 0, Math.min( 100, quality ) );
+	}
+	return 70;
+};
+
+/**
+ * Get the compression speed setting.
+ * Defaults to 10. Valid range: 0-10, where 10 is fastest and 0 is slowest.
+ */
+const getSpeedSetting = () => {
+	const speed = window?.dmCrabSettingsMain?.speed;
+	if ( 'number' === typeof speed ) {
+		return Math.max( 0, Math.min( 10, speed ) );
+	}
+	return 10;
+};
+
 const crabQueue = new CrabQueue();
 
 /**
@@ -92,8 +116,8 @@ const processFile = (
 					{
 						fileBuffer,
 						fileName: file.name,
-						quality: 70.0,
-						speed: 10,
+						quality: getQualitySetting(),
+						speed: getSpeedSetting(),
 						width: width || 0,
 						height: height || 0,
 						crop: crop || false,
