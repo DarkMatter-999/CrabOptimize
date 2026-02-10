@@ -1,0 +1,20 @@
+parameters:
+    level: 5
+    paths:
+        - craboptimize.php
+    scanFiles:
+        - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
+
+    excludePaths:
+        - vendor/
+        - node_modules/
+        - assets/build/
+        - tests/
+
+    reportUnmatchedIgnoredErrors: false
+    treatPhpDocTypesAsCertain: false
+
+    ignoreErrors:
+        - message: '#Call to static method get_instance\(\) on an unknown class DM_Crab_Optimize\\Plugin#'
+          paths:
+              - craboptimize.php

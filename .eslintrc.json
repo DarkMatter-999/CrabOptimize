@@ -3,7 +3,8 @@
   "ignorePatterns": [
     "node_modules/**",
     "assets/build/**",
-    "wasm/pkg/**"
+    "wasm/pkg/**",
+    "vitest.config.js"
   ],
   "rules": {
     "no-console": "warn"
