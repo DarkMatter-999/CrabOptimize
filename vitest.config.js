@@ -5,7 +5,7 @@ export default defineConfig( {
 	test: {
 		globals: true,
 		environment: 'jsdom',
-		setupFiles: [ './tests/setup.js' ],
+		setupFiles: [ './tests/setup.ts' ],
 		watch: false,
 		run: true,
 		include: [
@@ -30,6 +30,8 @@ export default defineConfig( {
 	},
 	resolve: {
 		alias: {
+			'@wordpress/i18n': path.resolve( __dirname, './tests/mocks/wordpress-i18n.ts' ),
+			'@wordpress/api-fetch': path.resolve( __dirname, './tests/mocks/wordpress-api-fetch.ts' ),
 			'@': path.resolve( __dirname, './assets/src' ),
 		},
 	},
