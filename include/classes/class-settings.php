@@ -83,11 +83,31 @@ class Settings {
 
 		register_setting(
 			'dm_crab_optimize_settings_group',
+			'dm_crab_optimize_format',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_format' ),
+				'default'           => 'avif',
+			)
+		);
+
+		register_setting(
+			'dm_crab_optimize_settings_group',
 			'dm_crab_optimize_quality',
 			array(
 				'type'              => 'number',
 				'sanitize_callback' => array( $this, 'sanitize_quality' ),
 				'default'           => 70,
+			)
+		);
+
+		register_setting(
+			'dm_crab_optimize_settings_group',
+			'dm_crab_optimize_quality_webp',
+			array(
+				'type'              => 'number',
+				'sanitize_callback' => array( $this, 'sanitize_quality' ),
+				'default'           => 75,
 			)
 		);
 
@@ -122,6 +142,18 @@ class Settings {
 	public function sanitize_speed( $value ) {
 		$speed = intval( $value );
 		return max( 0, min( 10, $speed ) );
+	}
+
+	/**
+	 * Sanitize format setting - ensure it's a valid format.
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return string The sanitized format value.
+	 */
+	public function sanitize_format( $value ) {
+		$allowed_formats = array( 'avif', 'webp' );
+		$format          = sanitize_text_field( $value );
+		return in_array( $format, $allowed_formats, true ) ? $format : 'avif';
 	}
 
 	/**
@@ -167,10 +199,27 @@ class Settings {
 					</td>
 					</tr>
 					<tr valign="top">
-					<th scope="row"><label for="dm_crab_optimize_quality"><?php esc_html_e( 'Image Quality', 'dm-crab-optimize' ); ?></label></th>
+					<th scope="row"><label for="dm_crab_optimize_format"><?php esc_html_e( 'Image Format', 'dm-crab-optimize' ); ?></label></th>
+					<td>
+						<select id="dm_crab_optimize_format" name="dm_crab_optimize_format">
+							<option value="avif" <?php selected( get_option( 'dm_crab_optimize_format', 'avif' ), 'avif' ); ?>><?php esc_html_e( 'AVIF', 'dm-crab-optimize' ); ?></option>
+							<option value="webp" <?php selected( get_option( 'dm_crab_optimize_format', 'avif' ), 'webp' ); ?>><?php esc_html_e( 'WebP', 'dm-crab-optimize' ); ?></option>
+						</select>
+						<p class="description"><?php esc_html_e( 'Select the image format to use for optimization. Additional formats (JPEG, PNG) will be supported in the future.', 'dm-crab-optimize' ); ?></p>
+					</td>
+					</tr>
+					<tr valign="top">
+					<th scope="row"><label for="dm_crab_optimize_quality"><?php esc_html_e( 'AVIF Quality', 'dm-crab-optimize' ); ?></label></th>
 					<td>
 						<input type="number" id="dm_crab_optimize_quality" name="dm_crab_optimize_quality" min="0" max="100" value="<?php echo esc_attr( get_option( 'dm_crab_optimize_quality', 70 ) ); ?>" />
 						<p class="description"><?php esc_html_e( 'AVIF quality level (0-100). Higher values produce better quality but larger files. Default: 70', 'dm-crab-optimize' ); ?></p>
+					</td>
+					</tr>
+					<tr valign="top">
+					<th scope="row"><label for="dm_crab_optimize_quality_webp"><?php esc_html_e( 'WebP Quality', 'dm-crab-optimize' ); ?></label></th>
+					<td>
+						<input type="number" id="dm_crab_optimize_quality_webp" name="dm_crab_optimize_quality_webp" min="0" max="100" value="<?php echo esc_attr( get_option( 'dm_crab_optimize_quality_webp', 75 ) ); ?>" />
+						<p class="description"><?php esc_html_e( 'WebP quality level (0-100). Higher values produce better quality but larger files. Default: 75', 'dm-crab-optimize' ); ?></p>
 					</td>
 					</tr>
 					<tr valign="top">

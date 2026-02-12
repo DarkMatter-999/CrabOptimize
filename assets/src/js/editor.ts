@@ -2,10 +2,15 @@ import apiFetch from '@wordpress/api-fetch';
 
 import { CrabQueue } from './crab-queue';
 import { calculateDimensions, getImageDimensions } from './utils';
+import {
+	ImageFormat,
+	getQualityForFormat,
+	getFormatMimeType,
+} from './format-utils';
 
 /**
  * Configuration flag that determines whether to keep the original unoptimized
- * image files. When `false` only the AVIF-converted files are retained.
+ * image files. When `false` only the converted files are retained.
  */
 const keepUnoptimizedFile = () =>
 	!! window?.dmCrabSettingsMain?.saveUnoptimized;
@@ -18,20 +23,44 @@ const isGenerateThumbnailsEnabled = () =>
 	!! window?.dmCrabSettingsMain?.generateThumbnails;
 
 /**
- * Get the AVIF quality setting.
- * Defaults to 70. Valid range: 0-100.
+ * Get the selected image format.
+ * Defaults to 'avif'. Valid values: 'avif', 'webp'.
+ */
+const getFormatSetting = (): ImageFormat => {
+	const format = window?.dmCrabSettingsMain?.format;
+	if (
+		'string' === typeof format &&
+		( 'avif' === format || 'webp' === format )
+	) {
+		return format as ImageFormat;
+	}
+	return 'avif';
+};
+
+/**
+ * Get the quality setting for the current format.
+ * Defaults to format-specific defaults.
  */
 const getQualitySetting = () => {
+	const format = getFormatSetting();
 	const quality = window?.dmCrabSettingsMain?.quality;
-	if ( 'number' === typeof quality ) {
-		return Math.max( 0, Math.min( 100, quality ) );
-	}
-	return 70;
+	const qualityWebp = window?.dmCrabSettingsMain?.qualityWebp;
+
+	const qualityValue =
+		'number' === typeof quality
+			? Math.max( 0, Math.min( 100, quality ) )
+			: 70;
+	const qualityWebpValue =
+		'number' === typeof qualityWebp
+			? Math.max( 0, Math.min( 100, qualityWebp ) )
+			: 75;
+
+	return getQualityForFormat( format, qualityValue, qualityWebpValue );
 };
 
 /**
  * Get the compression speed setting.
- * Defaults to 10. Valid range: 0-10, where 10 is fastest and 0 is slowest.
+ * Only used for AVIF. Defaults to 10. Valid range: 0-10, where 10 is fastest and 0 is slowest.
  */
 const getSpeedSetting = () => {
 	const speed = window?.dmCrabSettingsMain?.speed;
@@ -44,19 +73,63 @@ const getSpeedSetting = () => {
 const crabQueue = new CrabQueue();
 
 /**
- * Convert an image `File` to AVIF format using the WASM module.
+ * Load and decode an image file into ImageData format.
+ * Used for formats like WebP that need pre-decoded image data.
  *
- * The function validates that the input is an image and not already AVIF, reads
- * the file into an `ArrayBuffer`, and delegates the conversion to a dedicated
- * WebWorker. If the conversion succeeds, a new `File` containing the AVIF data
+ * @param file The image File to decode.
+ * @return Promise that resolves with ImageData object.
+ */
+const decodeImageToImageData = async ( file: File ): Promise< ImageData > => {
+	return new Promise( ( resolve, reject ) => {
+		const img = new Image();
+		const reader = new FileReader();
+
+		reader.onload = ( e ) => {
+			img.src = e.target?.result as string;
+		};
+
+		reader.onerror = () => {
+			reject( new Error( 'Failed to read image file' ) );
+		};
+
+		img.onload = () => {
+			const canvas = document.createElement( 'canvas' );
+			canvas.width = img.width;
+			canvas.height = img.height;
+			const ctx = canvas.getContext( '2d' );
+
+			if ( ! ctx ) {
+				reject( new Error( 'Failed to get canvas context' ) );
+				return;
+			}
+
+			ctx.drawImage( img, 0, 0 );
+			const imageData = ctx.getImageData( 0, 0, img.width, img.height );
+			resolve( imageData );
+		};
+
+		img.onerror = () => {
+			reject( new Error( 'Failed to load image' ) );
+		};
+
+		reader.readAsDataURL( file );
+	} );
+};
+
+/**
+ * Convert an image `File` to the configured format using the WASM module or jsquash.
+ *
+ * The function validates that the input is an image and not already in the target format,
+ * reads the file into an `ArrayBuffer`, and delegates the conversion to a dedicated
+ * WebWorker. If the conversion succeeds, a new `File` containing the converted data
  * is returned. When conversion fails, or the input is not a convertible image,
  * the original `File` is resolved unchanged.
  *
  * @param file   The image `File` to be processed.
- * @param width
- * @param height
- * @param crop
- * @return A `Promise` that resolves with either the converted AVIF `File` or
+ * @param width  Optional target width for resizing.
+ * @param height Optional target height for resizing.
+ * @param crop   Optional flag to crop to exact dimensions.
+ * @return A `Promise` that resolves with either the converted `File` or
  *          the original file when no conversion occurs.
  */
 const processFile = (
@@ -65,25 +138,38 @@ const processFile = (
 	height?: number,
 	crop?: boolean
 ): Promise< File > => {
+	const format = getFormatSetting();
+	const targetMimeType = getFormatMimeType( format );
+
 	if (
 		! ( file instanceof File ) ||
 		! file.type.startsWith( 'image/' ) ||
-		'image/avif' === file.type
+		targetMimeType === file.type
 	) {
 		return Promise.resolve( file );
 	}
 
 	return crabQueue.add( async () => {
-		return new Promise( ( resolve ) => {
-			console.log( `🦀 CrabOptimize: Converting ${ file.name }` );
-
-			const worker = new Worker(
-				new URL( './crab-worker.ts', import.meta.url )
+		return new Promise( async ( resolve ) => {
+			console.log(
+				`🦀 CrabOptimize: Converting ${
+					file.name
+				} to ${ format.toUpperCase() }`
 			);
-			const reader = new FileReader();
 
-			reader.onload = () => {
-				const fileBuffer = reader.result as ArrayBuffer;
+			try {
+				let fileBuffer: ArrayBuffer | undefined;
+				let imageData: ImageData | undefined;
+
+				if ( 'webp' === format ) {
+					imageData = await decodeImageToImageData( file );
+				} else {
+					fileBuffer = await file.arrayBuffer();
+				}
+
+				const worker = new Worker(
+					new URL( './crab-worker.ts', import.meta.url )
+				);
 
 				const handleMessage = ( e: MessageEvent ) => {
 					worker.removeEventListener( 'message', handleMessage );
@@ -95,50 +181,64 @@ const processFile = (
 						return;
 					}
 
-					const { avifBuffer, fileName, duration } = e.data;
+					const {
+						buffer,
+						fileName,
+						format: resultFormat,
+						duration,
+					} = e.data;
 
 					const timeLabel =
 						'number' === typeof duration
 							? `${ duration.toFixed( 2 ) }s`
 							: 'unknown duration';
 
-					const avifFile = new File( [ avifBuffer ], fileName, {
-						type: 'image/avif',
+					const mimeType = getFormatMimeType( resultFormat );
+					const convertedFile = new File( [ buffer ], fileName, {
+						type: mimeType,
 					} );
 
 					console.log( `Time: ${ timeLabel }` );
-					resolve( avifFile );
+					resolve( convertedFile );
+				};
+
+				const handleError = ( err: ErrorEvent ) => {
+					console.error( 'CrabOptimize: Worker error', err.message );
+					worker.removeEventListener( 'error', handleError );
+					worker.terminate();
+					resolve( file );
 				};
 
 				worker.addEventListener( 'message', handleMessage );
+				worker.addEventListener( 'error', handleError );
 
-				worker.postMessage(
-					{
-						fileBuffer,
-						fileName: file.name,
-						quality: getQualitySetting(),
-						speed: getSpeedSetting(),
-						width: width || 0,
-						height: height || 0,
-						crop: crop || false,
-					},
-					[ fileBuffer ]
-				);
-			};
+				const messageData: any = {
+					fileName: file.name,
+					format,
+					quality: getQualitySetting(),
+					speed: getSpeedSetting(),
+					width: width || 0,
+					height: height || 0,
+					crop: crop || false,
+				};
 
-			reader.onerror = () => {
-				console.error( 'CrabOptimize: FileReader error' );
-				worker.terminate();
+				if ( fileBuffer ) {
+					messageData.fileBuffer = fileBuffer;
+					worker.postMessage( messageData, [ fileBuffer ] );
+				} else if ( imageData ) {
+					messageData.imageData = imageData;
+					worker.postMessage( messageData );
+				}
+			} catch ( err ) {
+				console.error( 'CrabOptimize: Error preparing image', err );
 				resolve( file );
-			};
-
-			reader.readAsArrayBuffer( file );
+			}
 		} );
 	} );
 };
 
 /**
- * Generates AVIF thumbnails for various sizes based on the provided file.
+ * Generates optimized thumbnails for various sizes based on the provided file.
  *
  * @param {File}                     file           - The original image File.
  * @param {{ w: number; h: number }} originalDims   - Object containing the original image dimensions (width `w` and height `h`).
@@ -200,7 +300,7 @@ const generateThumbnails = async (
 			const reader = new FileReader();
 			reader.onloadend = () => {
 				const res = reader.result as string;
-				// Remove the Data URL prefix (data:image/avif;base64,)
+				// Remove the Data URL prefix (data:image/avif;base64, or data:image/webp;base64)
 				resolve( res.split( ',' )[ 1 ] );
 			};
 			reader.readAsDataURL( thumbFile );
@@ -234,6 +334,7 @@ const mediaUploadMiddleware = async ( options: any, next: any ) => {
 	) {
 		const file = options.body.get( 'file' );
 		if ( file instanceof File && ! keepUnoptimizedFile() ) {
+			const format = getFormatSetting();
 			const processed = await processFile( file );
 
 			const originalDims = await getImageDimensions( file );
@@ -258,9 +359,10 @@ const mediaUploadMiddleware = async ( options: any, next: any ) => {
 				);
 			}
 
+			const targetMimeType = getFormatMimeType( format );
 			if (
-				'image/avif' === processed.type &&
-				'image/avif' !== file.type
+				targetMimeType === processed.type &&
+				targetMimeType !== file.type
 			) {
 				options.body.append( 'is_crab_optimized', 'true' );
 			}
@@ -323,6 +425,8 @@ const setupUploaderEvents = ( uploader: PluploadInstance ) => {
 			return;
 		}
 
+		const format = getFormatSetting();
+		const targetMimeType = getFormatMimeType( format );
 		const queue: { plupload: any; native: File }[] = [];
 
 		files.forEach( ( f ) => {
@@ -330,7 +434,7 @@ const setupUploaderEvents = ( uploader: PluploadInstance ) => {
 			if (
 				native &&
 				native.type.startsWith( 'image/' ) &&
-				'image/avif' !== native.type &&
+				targetMimeType !== native.type &&
 				! f._crabOptimized
 			) {
 				queue.push( { plupload: f, native } );
@@ -376,7 +480,7 @@ const setupUploaderEvents = ( uploader: PluploadInstance ) => {
 							imageSizes
 						);
 
-						if ( 'image/avif' === processed.type ) {
+						if ( targetMimeType === processed.type ) {
 							return {
 								file: processed,
 								thumbnails,

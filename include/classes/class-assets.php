@@ -159,7 +159,9 @@ class Assets {
 					'showBadge'          => (int) get_option( 'dm_crab_optimize_show_badge', 0 ),
 					'imageSizes'         => wp_get_registered_image_subsizes(),
 					'generateThumbnails' => (int) get_option( 'dm_crab_optimize_generate_thumbnails', 0 ),
+					'format'             => (string) get_option( 'dm_crab_optimize_format', 'avif' ),
 					'quality'            => (float) get_option( 'dm_crab_optimize_quality', 70 ),
+					'qualityWebp'        => (float) get_option( 'dm_crab_optimize_quality_webp', 75 ),
 					'speed'              => (int) get_option( 'dm_crab_optimize_speed', 10 ),
 				)
 			) . ';',

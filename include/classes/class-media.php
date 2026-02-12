@@ -47,7 +47,7 @@ class Media {
 	}
 
 	/**
-	 * Displays the optimization status in the custom column.
+	 * Displays the optimization status and format in the custom column.
 	 *
 	 * @param string $column_name Name of the column.
 	 * @param int    $post_id     ID of the media attachment.
@@ -61,8 +61,12 @@ class Media {
 		$is_optimized = get_post_meta( $post_id, 'is_crab_optimized', true );
 
 		if ( 'true' === $is_optimized ) {
-			echo '<span class="dashicons dashicons-saved" style="color: #46b450;" title="Optimized to AVIF"></span>';
-			echo ' <code style="font-size: 10px;">AVIF</code>';
+			$format = get_post_meta( $post_id, 'crab_optimized_format', true );
+			$format = $format ? strtoupper( $format ) : 'AVIF';
+			$title  = "Optimized to {$format}";
+
+			echo '<span class="dashicons dashicons-saved" style="color: #46b450;" title="' . esc_attr( $title ) . '"></span>';
+			echo ' <code style="font-size: 10px;">' . esc_html( $format ) . '</code>';
 		} else {
 			echo '<span class="dashicons dashicons-minus" style="color: #ccc;"></span>';
 		}
@@ -80,7 +84,7 @@ class Media {
 	}
 
 	/**
-	 * Saves the optimization flag to post meta if present in the upload request.
+	 * Saves the optimization flag and format to post meta if present in the upload request.
 	 *
 	 * @param int $post_id The ID of the attachment.
 	 */
@@ -95,11 +99,18 @@ class Media {
 
 		if ( isset( $_POST['is_crab_optimized'] ) && 'true' === $_POST['is_crab_optimized'] ) {
 			update_post_meta( $post_id, 'is_crab_optimized', 'true' );
+
+			$mime_type = get_post_mime_type( $post_id );
+			if ( 'image/avif' === $mime_type ) {
+				update_post_meta( $post_id, 'crab_optimized_format', 'avif' );
+			} elseif ( 'image/webp' === $mime_type ) {
+				update_post_meta( $post_id, 'crab_optimized_format', 'webp' );
+			}
 		}
 	}
 
 	/**
-	 * Makes the 'is_crab_optimized' meta accessible to the JS Media models.
+	 * Makes the 'is_crab_optimized' and 'crab_optimized_format' meta accessible to the JS Media models.
 	 *
 	 * @param array   $response   Array of prepared attachment data.
 	 * @param WP_Post $attachment Attachment object.
@@ -110,18 +121,19 @@ class Media {
 			$response['meta'] = array();
 		}
 
-		$response['meta']['is_crab_optimized'] = get_post_meta( $attachment->ID, 'is_crab_optimized', true );
+		$response['meta']['is_crab_optimized']     = get_post_meta( $attachment->ID, 'is_crab_optimized', true );
+		$response['meta']['crab_optimized_format'] = get_post_meta( $attachment->ID, 'crab_optimized_format', true );
 
 		return $response;
 	}
 
 	/**
-	 * Disable generation of intermediate image sizes for AVIF attachments.
+	 * Disable generation of intermediate image sizes for optimized attachments.
 	 *
 	 * @param array $sizes        Array of image sizes that would be generated.
 	 * @param array $metadata     Attachment metadata array.
 	 * @param int   $attachment_id Attachment post ID.
-	 * @return array Modified list of sizes (empty for AVIF).
+	 * @return array Modified list of sizes (empty for optimized formats).
 	 */
 	public function disable_image_thumbnails( $sizes, $metadata, $attachment_id ) {
 		if ( ! get_option( 'dm_crab_optimize_generate_thumbnails', 0 ) ) {
@@ -130,7 +142,7 @@ class Media {
 
 		$mime_type = get_post_mime_type( $attachment_id );
 
-		if ( 'image/avif' === $mime_type ) {
+		if ( 'image/avif' === $mime_type || 'image/webp' === $mime_type ) {
 			return array();
 		}
 
@@ -138,7 +150,7 @@ class Media {
 	}
 
 	/**
-	 * Handle creation of AVIF thumbnail files when the upload request includes them.
+	 * Handle creation of optimized thumbnail files when the upload request includes them.
 	 *
 	 * This method checks the request context (Plupload or REST API), verifies that
 	 * the required fields are present, decodes the base‑64 image data and writes the
@@ -147,7 +159,7 @@ class Media {
 	 *
 	 * @param array $metadata     Existing attachment metadata.
 	 * @param int   $attachment_id Attachment post ID.
-	 * @return array Updated metadata including any AVIF thumbnails.
+	 * @return array Updated metadata including any optimized thumbnails.
 	 */
 	public function handle_thumbnails( $metadata, $attachment_id ) {
 		if ( ! get_option( 'dm_crab_optimize_generate_thumbnails', 0 ) ) {
@@ -176,12 +188,21 @@ class Media {
 		$upload_dir = dirname( $file_path );
 		$base_name  = pathinfo( $file_path, PATHINFO_FILENAME );
 
+		$mime_type           = get_post_mime_type( $attachment_id );
+		$extension           = 'avif';
+		$mime_type_thumbnail = 'image/avif';
+
+		if ( 'image/webp' === $mime_type ) {
+			$extension           = 'webp';
+			$mime_type_thumbnail = 'image/webp';
+		}
+
 		foreach ( $thumbnails as $thumb ) {
 			$size_name = sanitize_text_field( $thumb['size'] );
 			$width     = intval( $thumb['width'] );
 			$height    = intval( $thumb['height'] );
 
-			$thumb_filename = "{$base_name}-{$width}x{$height}.avif";
+			$thumb_filename = "{$base_name}-{$width}x{$height}.{$extension}";
 			$thumb_path     = "{$upload_dir}/{$thumb_filename}";
 
 			global $wp_filesystem;
@@ -200,7 +221,7 @@ class Media {
 				'file'      => $thumb_filename,
 				'width'     => $width,
 				'height'    => $height,
-				'mime-type' => 'image/avif',
+				'mime-type' => $mime_type_thumbnail,
 			);
 		}
 
