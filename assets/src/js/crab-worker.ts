@@ -10,6 +10,7 @@ import init, {
 } from '../../../wasm/pkg/craboptimize_wasm';
 import { encode as encodeWebp } from '@jsquash/webp';
 import { ImageFormat } from './format-utils';
+import { calculateDimensions } from './utils';
 
 let wasmReady = false;
 
@@ -18,14 +19,78 @@ let wasmReady = false;
  *
  * @param imageData The raw image data to encode.
  * @param quality   Quality setting (0-100).
+ * @param width     Target width for resizing.
+ * @param height    Target height for resizing.
+ * @param crop      Whether to crop to exact dimensions (optional).
  * @return Promise that resolves with the WebP buffer.
  */
 const encodeToWebP = async (
 	imageData: ImageData,
-	quality: number
+	quality: number,
+	width: number = 0,
+	height: number = 0,
+	crop: boolean = false
 ): Promise< Uint8Array > => {
 	try {
-		const webpBuffer = await encodeWebp( imageData, { quality } );
+		let finalImageData = imageData;
+
+		if ( width > 0 || height > 0 ) {
+			const origW = imageData.width;
+			const origH = imageData.height;
+
+			let targetW = width;
+			let targetH = height;
+
+			// For crop mode, use raw dimensions. For non-crop, use calculateDimensions
+			if ( ! crop ) {
+				const dimensions = calculateDimensions(
+					origW,
+					origH,
+					width,
+					height,
+					false
+				);
+				if ( dimensions ) {
+					targetW = dimensions.width;
+					targetH = dimensions.height;
+				}
+			}
+
+			if ( targetW > 0 && targetH > 0 ) {
+				const offscreenCanvas = new OffscreenCanvas( targetW, targetH );
+				const ctx = offscreenCanvas.getContext( '2d' );
+
+				if ( ! ctx ) {
+					throw new Error( 'Failed to get OffscreenCanvas context' );
+				}
+
+				const tempCanvas = new OffscreenCanvas( origW, origH );
+				const tempCtx = tempCanvas.getContext( '2d' );
+
+				if ( ! tempCtx ) {
+					throw new Error( 'Failed to get temporary canvas context' );
+				}
+
+				tempCtx.putImageData( imageData, 0, 0 );
+
+				// Draw scaled image
+				ctx.drawImage(
+					tempCanvas as any,
+					0,
+					0,
+					origW,
+					origH,
+					0,
+					0,
+					targetW,
+					targetH
+				);
+
+				finalImageData = ctx.getImageData( 0, 0, targetW, targetH );
+			}
+		}
+
+		const webpBuffer = await encodeWebp( finalImageData, { quality } );
 		return new Uint8Array( webpBuffer );
 	} catch ( err ) {
 		throw new Error(
@@ -85,7 +150,13 @@ self.onmessage = async ( e: MessageEvent ) => {
 					'WebP encoding requires imageData to be provided from main thread'
 				);
 			}
-			resultBuffer = await encodeToWebP( imageData, quality );
+			resultBuffer = await encodeToWebP(
+				imageData,
+				quality,
+				width,
+				height,
+				crop
+			);
 		} else {
 			if ( ! fileBuffer ) {
 				throw new Error(
