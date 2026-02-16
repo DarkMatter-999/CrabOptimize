@@ -1,10 +1,11 @@
 <?xml version="1.0" ?>
-<ruleset name="myplugin">
+<ruleset name="CrabOptimize Coding Standards">
 	<description>Best practices sniffs for WordPress plugins</description>
 
 	<rule ref="WordPress">
 		<exclude name="WordPress.Files.FileName.InvalidClassFileName" />
 		<exclude name="Generic.Functions.CallTimePassByReference" />
+		<exclude name="WordPress.Files.FileName.NotHyphenatedLowercase" />
 	</rule>
 
 	<rule ref="WordPress.WP.I18n">
@@ -22,4 +23,5 @@
 	<exclude-pattern>*/node_modules/*</exclude-pattern>
 	<exclude-pattern>*/vendor/*</exclude-pattern>
 	<exclude-pattern>assets/build/</exclude-pattern>
+	<exclude-pattern>.wp-env</exclude-pattern>
 </ruleset>
