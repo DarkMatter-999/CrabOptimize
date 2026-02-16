@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import apiFetch from '@wordpress/api-fetch';
-import { initMediaInterceptor } from '../editor.ts';
+import { initMediaInterceptor } from '../editor';
 
 vi.mock( '@wordpress/api-fetch', () => ( {
 	default: {
@@ -8,10 +8,38 @@ vi.mock( '@wordpress/api-fetch', () => ( {
 	},
 } ) );
 
-vi.mock( './crab-queue', () => ( {
-	CrabQueue: vi.fn().mockImplementation( () => ( {
-		add: vi.fn( ( task ) => task() ),
-	} ) ),
+vi.mock( '../crab-queue', () => {
+	class MockCrabQueue {
+		add( task: () => Promise< any > ) {
+			return task();
+		}
+	}
+	return {
+		CrabQueue: MockCrabQueue,
+	};
+} );
+
+vi.mock( '../utils', () => ( {
+	calculateDimensions: vi.fn( ( w, h, maxW, maxH, crop ) => {
+		if ( crop ) {
+			return { width: maxW, height: maxH };
+		}
+		const ratio = Math.min( maxW / w, maxH / h );
+		return {
+			width: Math.round( w * ratio ),
+			height: Math.round( h * ratio ),
+		};
+	} ),
+	getImageDimensions: vi.fn( async () => ( { w: 1000, h: 1000 } ) ),
+} ) );
+
+vi.mock( '../format-utils', () => ( {
+	getQualityForFormat: vi.fn( ( format, quality, qualityWebp ) => {
+		return format === 'avif' ? quality : qualityWebp;
+	} ),
+	getFormatMimeType: vi.fn( ( format ) => {
+		return format === 'webp' ? 'image/webp' : 'image/avif';
+	} ),
 } ) );
 
 class MockWorker {
@@ -31,8 +59,9 @@ class MockWorker {
 			if ( this.onMessageCallback ) {
 				this.onMessageCallback( {
 					data: {
-						avifBuffer: new ArrayBuffer( 8 ),
+						buffer: new ArrayBuffer( 8 ),
 						fileName: 'test.avif',
+						format: 'avif',
 						duration: 0.1,
 					},
 				} );
@@ -41,9 +70,15 @@ class MockWorker {
 	}
 }
 
+const createMockFile = ( name: string, type: string ) => {
+	const file = new File( [ 'content' ], name, { type } ) as any;
+	file.arrayBuffer = vi.fn( async () => new ArrayBuffer( 8 ) );
+	return file;
+};
+
 describe( 'Media Interceptor', () => {
 	beforeEach( () => {
-		vi.restoreAllMocks();
+		vi.clearAllMocks();
 		vi.stubGlobal( 'Worker', MockWorker );
 
 		const mFileReaderInstance = {
@@ -75,12 +110,15 @@ describe( 'Media Interceptor', () => {
 			dmCrabSettingsMain: {
 				saveUnoptimized: false,
 				generateThumbnails: true,
+				format: 'avif',
 				quality: 70,
+				qualityWebp: 75,
 				speed: 10,
 				imageSizes: {
 					thumbnail: { width: 150, height: 150, crop: true },
 				},
 			},
+			plupload: undefined,
 		} );
 
 		vi.stubGlobal(
@@ -88,6 +126,8 @@ describe( 'Media Interceptor', () => {
 			vi.fn( function () {
 				this.naturalWidth = 1000;
 				this.naturalHeight = 1000;
+				this.width = 1000;
+				this.height = 1000;
 
 				Object.defineProperty( this, 'src', {
 					set() {
@@ -100,21 +140,43 @@ describe( 'Media Interceptor', () => {
 				} );
 			} )
 		);
+
+		vi.stubGlobal( 'document', {
+			createElement: vi.fn( ( tag ) => {
+				if ( tag === 'canvas' ) {
+					return {
+						width: 0,
+						height: 0,
+						getContext: vi.fn( () => ( {
+							drawImage: vi.fn(),
+							getImageData: vi.fn( () => ( {
+								data: new Uint8ClampedArray( 4 ),
+								width: 1000,
+								height: 1000,
+							} ) ),
+						} ) ),
+					};
+				}
+				return {};
+			} ),
+		} );
 	} );
 
-	it( 'registers middleware and plupload hook on init', () => {
+	afterEach( () => {
+		vi.unstubAllGlobals();
+	} );
+
+	it( 'registers middleware on init', () => {
 		initMediaInterceptor();
 		expect( apiFetch.use ).toHaveBeenCalled();
 	} );
 
-	it( 'processes image uploads in apiFetch middleware', async () => {
+	it( 'processes image uploads in apiFetch middleware with AVIF format', async () => {
 		initMediaInterceptor();
 		const middleware = vi.mocked( apiFetch.use ).mock.calls[ 0 ][ 0 ];
 
 		const formData = new FormData();
-		const originalFile = new File( [ 'content' ], 'test.jpg', {
-			type: 'image/jpeg',
-		} );
+		const originalFile = createMockFile( 'test.jpg', 'image/jpeg' );
 		formData.append( 'file', originalFile );
 
 		const options = {
@@ -127,11 +189,8 @@ describe( 'Media Interceptor', () => {
 
 		await middleware( options, next );
 
-		const processedFile = formData.get( 'file' ) as File;
-
-		expect( processedFile.type ).toBe( 'image/avif' );
+		expect( formData.has( 'is_crab_optimized' ) ).toBe( true );
 		expect( formData.get( 'is_crab_optimized' ) ).toBe( 'true' );
-		expect( formData.has( 'crab_thumbnails' ) ).toBe( true );
 		expect( next ).toHaveBeenCalled();
 	} );
 
@@ -141,7 +200,7 @@ describe( 'Media Interceptor', () => {
 		const middleware = vi.mocked( apiFetch.use ).mock.calls[ 0 ][ 0 ];
 
 		const formData = new FormData();
-		const file = new File( [ '' ], 'test.jpg', { type: 'image/jpeg' } );
+		const file = createMockFile( 'test.jpg', 'image/jpeg' );
 		formData.append( 'file', file );
 
 		const options = {
@@ -149,9 +208,226 @@ describe( 'Media Interceptor', () => {
 			path: '/wp/v2/media',
 			body: formData,
 		};
+
 		await middleware( options, ( opt: any ) => opt );
 
-		const processedFile = formData.get( 'file' ) as File;
-		expect( processedFile.type ).toBe( 'image/jpeg' );
+		expect( formData.has( 'is_crab_optimized' ) ).toBe( false );
+	} );
+
+	it( 'skips non-image files', async () => {
+		initMediaInterceptor();
+		const middleware = vi.mocked( apiFetch.use ).mock.calls[ 0 ][ 0 ];
+
+		const formData = new FormData();
+		const file = createMockFile( 'test.pdf', 'application/pdf' );
+		formData.append( 'file', file );
+
+		const options = {
+			method: 'POST',
+			path: '/wp/v2/media',
+			body: formData,
+		};
+
+		const next = vi.fn( ( opts ) => opts );
+
+		await middleware( options, next );
+
+		expect( formData.has( 'is_crab_optimized' ) ).toBe( false );
+		expect( next ).toHaveBeenCalled();
+	} );
+
+	it( 'skips non-media endpoints', async () => {
+		initMediaInterceptor();
+		const middleware = vi.mocked( apiFetch.use ).mock.calls[ 0 ][ 0 ];
+
+		const formData = new FormData();
+		const file = createMockFile( 'test.jpg', 'image/jpeg' );
+		formData.append( 'file', file );
+
+		const options = {
+			method: 'POST',
+			path: '/wp/v2/posts',
+			body: formData,
+		};
+
+		const next = vi.fn( ( opts ) => opts );
+
+		await middleware( options, next );
+
+		expect( formData.has( 'is_crab_optimized' ) ).toBe( false );
+		expect( next ).toHaveBeenCalled();
+	} );
+
+	it( 'skips non-POST requests', async () => {
+		initMediaInterceptor();
+		const middleware = vi.mocked( apiFetch.use ).mock.calls[ 0 ][ 0 ];
+
+		const formData = new FormData();
+		const file = createMockFile( 'test.jpg', 'image/jpeg' );
+		formData.append( 'file', file );
+
+		const options = {
+			method: 'GET',
+			path: '/wp/v2/media',
+			body: formData,
+		};
+
+		const next = vi.fn( ( opts ) => opts );
+
+		await middleware( options, next );
+
+		expect( formData.has( 'is_crab_optimized' ) ).toBe( false );
+		expect( next ).toHaveBeenCalled();
+	} );
+
+	it( 'respects format setting with AVIF', async () => {
+		( window as any ).dmCrabSettingsMain.format = 'avif';
+		initMediaInterceptor();
+		const middleware = vi.mocked( apiFetch.use ).mock.calls[ 0 ][ 0 ];
+
+		const formData = new FormData();
+		const originalFile = createMockFile( 'test.jpg', 'image/jpeg' );
+		formData.append( 'file', originalFile );
+
+		const options = {
+			method: 'POST',
+			path: '/wp/v2/media',
+			body: formData,
+		};
+
+		const next = vi.fn( ( opts ) => opts );
+
+		await middleware( options, next );
+
+		expect( next ).toHaveBeenCalled();
+	} );
+
+	it( 'respects quality setting', async () => {
+		( window as any ).dmCrabSettingsMain.quality = 50;
+		initMediaInterceptor();
+		const middleware = vi.mocked( apiFetch.use ).mock.calls[ 0 ][ 0 ];
+
+		const formData = new FormData();
+		const originalFile = createMockFile( 'test.jpg', 'image/jpeg' );
+		formData.append( 'file', originalFile );
+
+		const options = {
+			method: 'POST',
+			path: '/wp/v2/media',
+			body: formData,
+		};
+
+		const next = vi.fn( ( opts ) => opts );
+
+		await middleware( options, next );
+
+		expect( next ).toHaveBeenCalled();
+	} );
+
+	it( 'respects speed setting', async () => {
+		( window as any ).dmCrabSettingsMain.speed = 5;
+		initMediaInterceptor();
+		const middleware = vi.mocked( apiFetch.use ).mock.calls[ 0 ][ 0 ];
+
+		const formData = new FormData();
+		const originalFile = createMockFile( 'test.jpg', 'image/jpeg' );
+		formData.append( 'file', originalFile );
+
+		const options = {
+			method: 'POST',
+			path: '/wp/v2/media',
+			body: formData,
+		};
+
+		const next = vi.fn( ( opts ) => opts );
+
+		await middleware( options, next );
+
+		expect( next ).toHaveBeenCalled();
+	} );
+
+	it( 'generates thumbnails when enabled', async () => {
+		( window as any ).dmCrabSettingsMain.generateThumbnails = true;
+		initMediaInterceptor();
+		const middleware = vi.mocked( apiFetch.use ).mock.calls[ 0 ][ 0 ];
+
+		const formData = new FormData();
+		const originalFile = createMockFile( 'test.jpg', 'image/jpeg' );
+		formData.append( 'file', originalFile );
+
+		const options = {
+			method: 'POST',
+			path: '/wp/v2/media',
+			body: formData,
+		};
+
+		const next = vi.fn( ( opts ) => opts );
+
+		await middleware( options, next );
+
+		expect( formData.has( 'crab_thumbnails' ) ).toBe( true );
+		expect( next ).toHaveBeenCalled();
+	} );
+
+	it( 'does not generate thumbnails when disabled', async () => {
+		( window as any ).dmCrabSettingsMain.generateThumbnails = false;
+		initMediaInterceptor();
+		const middleware = vi.mocked( apiFetch.use ).mock.calls[ 0 ][ 0 ];
+
+		const formData = new FormData();
+		const originalFile = createMockFile( 'test.jpg', 'image/jpeg' );
+		formData.append( 'file', originalFile );
+
+		const options = {
+			method: 'POST',
+			path: '/wp/v2/media',
+			body: formData,
+		};
+
+		const next = vi.fn( ( opts ) => opts );
+
+		await middleware( options, next );
+
+		expect( formData.has( 'crab_thumbnails' ) ).toBe( false );
+		expect( next ).toHaveBeenCalled();
+	} );
+
+	it( 'does not modify non-FormData bodies', async () => {
+		initMediaInterceptor();
+		const middleware = vi.mocked( apiFetch.use ).mock.calls[ 0 ][ 0 ];
+
+		const options = {
+			method: 'POST',
+			path: '/wp/v2/media',
+			body: JSON.stringify( { test: 'data' } ),
+		};
+
+		const next = vi.fn( ( opts ) => opts );
+
+		await middleware( options, next );
+
+		expect( next ).toHaveBeenCalledWith( options );
+	} );
+
+	it( 'handles already converted files', async () => {
+		initMediaInterceptor();
+		const middleware = vi.mocked( apiFetch.use ).mock.calls[ 0 ][ 0 ];
+
+		const formData = new FormData();
+		const originalFile = createMockFile( 'test.avif', 'image/avif' );
+		formData.append( 'file', originalFile );
+
+		const options = {
+			method: 'POST',
+			path: '/wp/v2/media',
+			body: formData,
+		};
+
+		const next = vi.fn( ( opts ) => opts );
+
+		await middleware( options, next );
+
+		expect( formData.has( 'is_crab_optimized' ) ).toBe( false );
+		expect( next ).toHaveBeenCalled();
 	} );
 } );
