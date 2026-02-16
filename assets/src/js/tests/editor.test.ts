@@ -31,6 +31,11 @@ vi.mock( '../utils', () => ( {
 		};
 	} ),
 	getImageDimensions: vi.fn( async () => ( { w: 1000, h: 1000 } ) ),
+	decodeImageToImageData: vi.fn( async () => ( {
+		data: new Uint8ClampedArray( 4000000 ),
+		width: 1000,
+		height: 1000,
+	} ) ),
 } ) );
 
 vi.mock( '../format-utils', () => ( {
@@ -282,6 +287,28 @@ describe( 'Media Interceptor', () => {
 
 	it( 'respects format setting with AVIF', async () => {
 		( window as any ).dmCrabSettingsMain.format = 'avif';
+		initMediaInterceptor();
+		const middleware = vi.mocked( apiFetch.use ).mock.calls[ 0 ][ 0 ];
+
+		const formData = new FormData();
+		const originalFile = createMockFile( 'test.jpg', 'image/jpeg' );
+		formData.append( 'file', originalFile );
+
+		const options = {
+			method: 'POST',
+			path: '/wp/v2/media',
+			body: formData,
+		};
+
+		const next = vi.fn( ( opts ) => opts );
+
+		await middleware( options, next );
+
+		expect( next ).toHaveBeenCalled();
+	} );
+
+	it( 'respects format setting with WebP', async () => {
+		( window as any ).dmCrabSettingsMain.format = 'webp';
 		initMediaInterceptor();
 		const middleware = vi.mocked( apiFetch.use ).mock.calls[ 0 ][ 0 ];
 

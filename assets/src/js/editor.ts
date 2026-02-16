@@ -1,7 +1,11 @@
 import apiFetch from '@wordpress/api-fetch';
 
 import { CrabQueue } from './crab-queue';
-import { calculateDimensions, getImageDimensions } from './utils';
+import {
+	calculateDimensions,
+	getImageDimensions,
+	decodeImageToImageData,
+} from './utils';
 import {
 	ImageFormat,
 	getQualityForFormat,
@@ -71,50 +75,6 @@ const getSpeedSetting = () => {
 };
 
 const crabQueue = new CrabQueue();
-
-/**
- * Load and decode an image file into ImageData format.
- * Used for formats like WebP that need pre-decoded image data.
- *
- * @param file The image File to decode.
- * @return Promise that resolves with ImageData object.
- */
-const decodeImageToImageData = async ( file: File ): Promise< ImageData > => {
-	return new Promise( ( resolve, reject ) => {
-		const img = new Image();
-		const reader = new FileReader();
-
-		reader.onload = ( e ) => {
-			img.src = e.target?.result as string;
-		};
-
-		reader.onerror = () => {
-			reject( new Error( 'Failed to read image file' ) );
-		};
-
-		img.onload = () => {
-			const canvas = document.createElement( 'canvas' );
-			canvas.width = img.width;
-			canvas.height = img.height;
-			const ctx = canvas.getContext( '2d' );
-
-			if ( ! ctx ) {
-				reject( new Error( 'Failed to get canvas context' ) );
-				return;
-			}
-
-			ctx.drawImage( img, 0, 0 );
-			const imageData = ctx.getImageData( 0, 0, img.width, img.height );
-			resolve( imageData );
-		};
-
-		img.onerror = () => {
-			reject( new Error( 'Failed to load image' ) );
-		};
-
-		reader.readAsDataURL( file );
-	} );
-};
 
 /**
  * Convert an image `File` to the configured format using the WASM module or jsquash.
