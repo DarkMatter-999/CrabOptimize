@@ -26,5 +26,6 @@ class Plugin {
 		Assets::get_instance();
 		Media::get_instance();
 		Settings::get_instance();
+		Migrate::get_instance();
 	}
 }

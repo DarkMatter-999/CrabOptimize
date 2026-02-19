@@ -33,7 +33,7 @@ export const calculateDimensions = (
 	targetW?: number,
 	targetH?: number,
 	crop: boolean = false
-) => {
+): { width: number; height: number } | null => {
 	const w = targetW && targetW > 0 ? targetW : 0;
 	const h = targetH && targetH > 0 ? targetH : 0;
 

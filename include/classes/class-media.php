@@ -97,7 +97,7 @@ class Media {
 			return;
 		}
 
-		if ( isset( $_POST['is_crab_optimized'] ) && 'true' === $_POST['is_crab_optimized'] ) {
+		if ( isset( $_REQUEST['is_crab_optimized'] ) && 'true' === $_REQUEST['is_crab_optimized'] ) {
 			update_post_meta( $post_id, 'is_crab_optimized', 'true' );
 
 			$mime_type = get_post_mime_type( $post_id );

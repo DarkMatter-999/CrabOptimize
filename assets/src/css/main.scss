@@ -52,3 +52,80 @@
 .dm-crab-toggle-switch input:checked + .dm-crab-slider::before {
 	transform: translateX(26px);
 }
+
+.crab-migration-box {
+	padding: 20px;
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	border-radius: 4px;
+
+	p {
+		color: #666;
+		margin-bottom: 20px;
+	}
+
+	#migration-status-text {
+		margin-bottom: 10px;
+		font-weight: 700;
+		color: #23282d;
+	}
+
+	.progress-container {
+		height: 30px;
+		background: #f0f0f1;
+		border-radius: 4px;
+		overflow: hidden;
+		margin-bottom: 20px;
+		position: relative;
+	}
+
+	#crab-progress-bar {
+		width: 0%;
+		height: 100%;
+		background: linear-gradient(90deg, #2271b1, #135e96);
+		transition: width 0.3s ease;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: #fff;
+		font-weight: 700;
+		font-size: 12px;
+	}
+
+	#migration-details {
+		background: #f9f9f9;
+		padding: 15px;
+		border-radius: 4px;
+		margin-bottom: 20px;
+		font-size: 14px;
+	}
+
+	#action-buttons {
+		display: flex;
+		gap: 10px;
+		margin-bottom: 20px;
+	}
+
+	details {
+		margin-top: 20px;
+	}
+
+	summary {
+		cursor: pointer;
+		font-weight: 700;
+		padding: 10px;
+		background: #f5f5f5;
+		border-radius: 4px;
+	}
+
+	#migration-logs {
+		margin-top: 10px;
+		background: #f5f5f5;
+		padding: 10px;
+		border-radius: 4px;
+		max-height: 400px;
+		overflow-y: auto;
+		font-size: 12px;
+		font-family: monospace;
+	}
+}

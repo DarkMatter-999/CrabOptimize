@@ -69,7 +69,7 @@ class Assets {
 			$this->enqueue_settings_script();
 		}
 
-		if ( 'upload.php' === $hook || 'media-new.php' === $hook ) {
+		if ( 'upload.php' === $hook || 'media-new.php' === $hook || 'admin_page_dm-crab-optimize-migration' === $hook ) {
 			$script_asset = include DMCO_PLUGIN_PATH . 'assets/build/js/editor.asset.php';
 
 			wp_enqueue_script(
@@ -78,6 +78,30 @@ class Assets {
 				$script_asset['dependencies'],
 				$script_asset['version'],
 				true
+			);
+		}
+
+		if ( 'admin_page_dm-crab-optimize-migration' === $hook ) {
+			$this->enqueue_settings_script();
+
+			$migrate_asset = include DMCO_PLUGIN_PATH . 'assets/build/js/migrate.asset.php';
+			wp_enqueue_script(
+				'dm-crab-opt-migrate-js',
+				DMCO_PLUGIN_URL . 'assets/build/js/migrate.js',
+				$migrate_asset['dependencies'],
+				$migrate_asset['version'],
+				true
+			);
+
+			wp_add_inline_script(
+				'dm-crab-settings-main',
+				'window.dmCrabSettingsMigrate = ' . wp_json_encode(
+					array(
+						'nonce'   => wp_create_nonce( 'wp_rest' ),
+						'restUrl' => esc_url_raw( rest_url( \DM_Crab_Optimize\Migrate::get_instance()->rest_namespace ) ),
+					)
+				) . ';',
+				'before'
 			);
 		}
 	}
@@ -127,6 +151,7 @@ class Assets {
 				'widgets.php',
 				'site-editor.php',
 				'media_page_dm-crab-optimize-settings',
+				'admin_page_dm-crab-optimize-migration',
 			),
 			true
 		);

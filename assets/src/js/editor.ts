@@ -92,7 +92,7 @@ const crabQueue = new CrabQueue();
  * @return A `Promise` that resolves with either the converted `File` or
  *          the original file when no conversion occurs.
  */
-const processFile = (
+export const processFile = (
 	file: File,
 	width?: number,
 	height?: number,

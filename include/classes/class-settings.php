@@ -21,6 +21,13 @@ class Settings {
 	use Singleton;
 
 	/**
+	 * Slug for the migration page, used for linking from settings.
+	 *
+	 * @var string $migration_page
+	 */
+	private $migration_page = 'dm-crab-optimize-migration';
+
+	/**
 	 * Constructor for the Settings class.
 	 *
 	 * @return void
@@ -43,6 +50,15 @@ class Settings {
 			'dm-crab-optimize-settings',
 			array( $this, 'render_settings_page' )
 		);
+
+			add_submenu_page(
+				'options.php',
+				__( 'Image Migration', 'dm-crab-optimize' ),
+				__( 'Image Migration', 'dm-crab-optimize' ),
+				'manage_options',
+				$this->migration_page,
+				array( $this, 'render_migration_page' )
+			);
 	}
 
 	/**
@@ -231,7 +247,22 @@ class Settings {
 					</tr>
 				</table>
 				<?php submit_button(); ?>
+				<a href="<?php echo esc_url( admin_url( "admin.php?page={$this->migration_page}" ) ); ?>" class="button button-secondary">
+					<?php esc_html_e( 'Bulk Migration Tool', 'dm-crab-optimize' ); ?>
+				</a>
 			</form>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Render the Migration page markup.
+	 */
+	public function render_migration_page() {
+		?>
+	<div class="wrap">
+		<h1><?php esc_html_e( 'Image Migration', 'dm-crab-optimize' ); ?></h1>
+		<div id="migration-root"></div>
 		</div>
 		<?php
 	}

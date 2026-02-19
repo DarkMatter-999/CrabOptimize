@@ -93,3 +93,17 @@ interface AttachmentView {
 	model: AttachmentModel;
 	render(): AttachmentView;
 }
+
+declare global {
+ interface Window {
+  dmCrabSettingsMain?: {
+   saveUnoptimized?: boolean;
+   generateThumbnails?: boolean;
+   format?: string;
+   quality?: number;
+   qualityWebp?: number;
+   speed?: number;
+   imageSizes?: Record<string, any>;
+  };
+ }
+}
