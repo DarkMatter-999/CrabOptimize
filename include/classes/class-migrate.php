@@ -467,12 +467,12 @@ class Migrate {
 		);
 	}
 
-		/**
-		 * Get the array of replacement rules.
-		 *
-		 * @param array $optimization_map Associative array [ Old_ID => New_ID ].
-		 * @return array Array of rules with 'pattern' and 'callback'.
-		 */
+	/**
+	 * Get the array of replacement rules.
+	 *
+	 * @param array $optimization_map Associative array [ Old_ID => New_ID ].
+	 * @return array Array of rules with 'pattern' and 'callback'.
+	 */
 	public function get_replacement_rules( $optimization_map ) {
 		$rules = array();
 
@@ -547,6 +547,66 @@ class Migrate {
 				$new_attrs = preg_replace( '/\s*srcset=([\'"])(.*?)\1/', '', $new_attrs );
 
 				return '<img ' . $new_attrs . '>';
+			},
+		);
+
+		// RULE 3: Gutenberg Media-Text Blocks (JSON).
+		// Matches: <!-- wp:media-text {"mediaId":15,...} -->.
+		$rules['gutenberg_media_text'] = array(
+			'pattern'  => '/<!-- wp:media-text (\{.*?\}) -->/',
+			'callback' => function ( $matches ) use ( $optimization_map ) {
+				$json_str = $matches[1];
+				$data     = json_decode( $json_str, true );
+
+				if ( json_last_error() !== JSON_ERROR_NONE || ! isset( $data['mediaId'] ) ) {
+					return $matches[0];
+				}
+
+				$old_id = (int) $data['mediaId'];
+
+				if ( ! isset( $optimization_map[ $old_id ] ) ) {
+					return $matches[0];
+				}
+
+				$new_id = (int) $optimization_map[ $old_id ];
+				$data['mediaId'] = $new_id;
+
+				$new_link = get_attachment_link( $new_id );
+				if ( $new_link ) {
+					$data['mediaLink'] = $new_link;
+				}
+
+				return '<!-- wp:media-text ' . wp_json_encode( $data ) . ' -->';
+			},
+		);
+
+		// RULE 4: Gutenberg Cover Blocks (JSON).
+		// Matches: <!-- wp:cover {"url":"...","id":19,...} -->.
+		$rules['gutenberg_cover'] = array(
+			'pattern'  => '/<!-- wp:cover (\{.*?\}) -->/',
+			'callback' => function ( $matches ) use ( $optimization_map ) {
+				$json_str = $matches[1];
+				$data     = json_decode( $json_str, true );
+
+				if ( json_last_error() !== JSON_ERROR_NONE ) {
+					return $matches[0];
+				}
+
+				if ( isset( $data['id'] ) ) {
+					$old_id = (int) $data['id'];
+
+					if ( isset( $optimization_map[ $old_id ] ) ) {
+							$new_id       = (int) $optimization_map[ $old_id ];
+							$data['id']   = $new_id;
+
+							$new_url = wp_get_attachment_url( $new_id );
+						if ( $new_url ) {
+							$data['url'] = esc_url_raw( $new_url );
+						}
+					}
+				}
+
+				return '<!-- wp:cover ' . wp_json_encode( $data ) . ' -->';
 			},
 		);
 
