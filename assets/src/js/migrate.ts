@@ -11,8 +11,12 @@ class CrabMigration {
 	private root: HTMLElement | null;
 	private progressBar: HTMLElement | null = null;
 	private statusText: HTMLElement | null = null;
-	private currentPhase: 'idle' | 'discovery' | 'conversion' | 'complete' =
-		'idle';
+	private currentPhase:
+		| 'idle'
+		| 'discovery'
+		| 'conversion'
+		| 'replacement'
+		| 'complete' = 'idle';
 	private discoveredImages: Array< {
 		id: number;
 		title: string;
@@ -22,6 +26,7 @@ class CrabMigration {
 	private convertedCount: number = 0;
 	private failedCount: number = 0;
 	private isPaused: boolean = false;
+	private replacedPostsCount: number = 0;
 
 	constructor() {
 		this.root = document.getElementById( 'migration-root' );
@@ -242,6 +247,14 @@ class CrabMigration {
 				)
 			);
 		}
+
+		this.addLog(
+			__( 'Starting Content Replacement Phase…', 'dm-crab-optimize' )
+		);
+		this.currentPhase = 'replacement'; // Add 'replacement' to your TS type definition
+		this.updateDetails();
+
+		await this.runReplacementPhase( settings );
 
 		if ( ! this.isPaused ) {
 			this.currentPhase = 'complete';
@@ -607,6 +620,83 @@ class CrabMigration {
 		} catch ( error ) {
 			console.error( 'Upload error:', error );
 			throw error;
+		}
+	}
+
+	private async runReplacementPhase( settings: any ) {
+		let currentPage = 1;
+		let isFinished = false;
+		let totalPages = 1;
+
+		while ( ! isFinished && ! this.isPaused ) {
+			const progressPercent = ( currentPage / totalPages ) * 100;
+			this.updateUI(
+				progressPercent,
+				sprintf(
+					/* translators: %1$d = current page number, %2$d = total number of pages */
+					__(
+						'Replacing images in content (Page %1$d/%2$d)',
+						'dm-crab-optimize'
+					),
+					currentPage,
+					totalPages
+				)
+			);
+
+			try {
+				const baseUrl = `${ settings.restUrl }/replace-content`;
+				const separator = baseUrl.includes( '?' ) ? '&' : '?';
+				const fetchUrl = `${ baseUrl }${ separator }page=${ currentPage }`;
+
+				const response = await fetch( fetchUrl, {
+					method: 'POST',
+					headers: {
+						'X-WP-Nonce': settings.nonce,
+						'Content-Type': 'application/json',
+					},
+				} );
+
+				if ( ! response.ok ) {
+					throw new Error(
+						`Replacement request failed: ${ response.status }`
+					);
+				}
+
+				const data = await response.json();
+				totalPages = data.total_pages || 1;
+
+				// Track stats
+				if ( data.replaced > 0 ) {
+					this.replacedPostsCount += data.replaced;
+					this.addLog(
+						sprintf(
+							// translators: %1$d = number of posts updated, %2$d = page number
+							__(
+								'Updated %1$d posts on page %2$d',
+								'dm-crab-optimize'
+							),
+							data.replaced,
+							currentPage
+						)
+					);
+				}
+
+				if ( data.is_last || currentPage >= totalPages ) {
+					isFinished = true;
+				} else {
+					currentPage++;
+				}
+			} catch ( error ) {
+				console.error( 'Replacement error:', error );
+				this.addLog(
+					sprintf(
+						/* translators: %s = error message */
+						__( 'Error replacing content: %s', 'dm-crab-optimize' ),
+						error.message
+					)
+				);
+				isFinished = true;
+			}
 		}
 	}
 

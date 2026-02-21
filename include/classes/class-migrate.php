@@ -43,8 +43,7 @@ class Migrate {
 		$this->table_name = $wpdb->prefix . 'dm_crab_migration';
 
 		add_action( 'rest_api_init', array( $this, 'register_migration_routes' ) );
-
-								add_action( 'rest_insert_attachment', array( $this, 'handle_migration_link' ), 10, 3 );
+		add_action( 'rest_insert_attachment', array( $this, 'handle_migration_link' ), 10, 3 );
 	}
 
 	/**
@@ -106,6 +105,16 @@ class Migrate {
 						},
 					),
 				),
+			)
+		);
+
+		register_rest_route(
+			$this->rest_namespace,
+			'/replace-content',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'handle_content_replacement' ),
+				'permission_callback' => array( $this, 'check_permission' ),
 			)
 		);
 	}
@@ -229,7 +238,7 @@ class Migrate {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- We need to check for existing records before inserting to avoid duplicates.
 		$exists = $wpdb->get_var(
 			$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is status and properly escaped by $wpdb->prepare.
+			    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is status and properly escaped by $wpdb->prepare.
 				"SELECT id FROM {$this->table_name} WHERE attachment_id = %d",
 				$attachment_id
 			)
@@ -262,19 +271,19 @@ class Migrate {
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$total_unoptimized = (int) $wpdb->get_var(
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is status and properly escaped by $wpdb->prepare.
+		    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is status and properly escaped by $wpdb->prepare.
 			"SELECT COUNT(*) FROM {$this->table_name} WHERE status = 'pending'"
 		);
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$total_completed = (int) $wpdb->get_var(
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is status and properly escaped by $wpdb->prepare.
+		    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is status and properly escaped by $wpdb->prepare.
 			"SELECT COUNT(*) FROM {$this->table_name} WHERE status = 'completed'"
 		);
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$total_failed = (int) $wpdb->get_var(
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is status and properly escaped by $wpdb->prepare.
+		    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is status and properly escaped by $wpdb->prepare.
 			"SELECT COUNT(*) FROM {$this->table_name} WHERE status = 'failed'"
 		);
 
@@ -308,7 +317,7 @@ class Migrate {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$exists = $wpdb->get_var(
 			$wpdb->prepare(
-   // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is status and properly escaped by $wpdb->prepare.
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is status and properly escaped by $wpdb->prepare.
 				"SELECT id FROM {$this->table_name} WHERE attachment_id = %d",
 				$attachment_id
 			)
@@ -334,5 +343,213 @@ class Migrate {
 		}
 
 		return new \WP_REST_Response( array( 'success' => true ), 200 );
+	}
+
+	/**
+	 * Batch process posts to replace image references.
+	 *
+	 * @param \WP_REST_Request $request REST Request.
+	 */
+	public function handle_content_replacement( \WP_REST_Request $request ) {
+		$page       = $request->get_param( 'page' ) ? (int) $request->get_param( 'page' ) : 1;
+		$per_page   = 50;
+		$post_types = array( 'post', 'page' );
+
+		$query = new \WP_Query(
+			array(
+				'post_type'      => $post_types,
+				'post_status'    => 'any',
+				'posts_per_page' => $per_page,
+				'paged'          => $page,
+				'fields'         => 'ids',
+				'no_found_rows'  => false,
+			)
+		);
+
+		if ( empty( $query->posts ) ) {
+			return new \WP_REST_Response(
+				array(
+					'processed' => 0,
+					'replaced'  => 0,
+					'is_last'   => true,
+				),
+				200
+			);
+		}
+
+		$post_ids       = $query->posts;
+		$replaced_count = 0;
+
+		global $wpdb;
+		$ids_placeholder = implode( ',', array_fill( 0, count( $post_ids ), '%d' ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$results = $wpdb->get_results(
+			$wpdb->prepare(
+			    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+				"SELECT ID, post_content FROM {$wpdb->posts} WHERE ID IN ($ids_placeholder)",
+				$post_ids
+			)
+		);
+
+		// Build Optimization Map (Old ID -> New ID).
+		// We scan all content first to find ALL potential IDs to avoid N+1 queries.
+		$all_found_img_ids = array();
+		foreach ( $results as $post ) {
+			// Scan for IDs in classes or JSON to build the map.
+			if ( preg_match_all( '/wp-image-(\d+)|"id":(\d+)/', $post->post_content, $matches ) ) {
+				foreach ( $matches[1] as $m ) {
+					if ( $m ) {
+						$all_found_img_ids[] = (int) $m;
+					}
+				}
+				foreach ( $matches[2] as $m ) {
+					if ( $m ) {
+						$all_found_img_ids[] = (int) $m;
+					}
+				}
+			}
+		}
+		$all_found_img_ids = array_unique( $all_found_img_ids );
+
+		$optimization_map = array();
+		if ( ! empty( $all_found_img_ids ) ) {
+			$img_ids_placeholder = implode( ',', array_fill( 0, count( $all_found_img_ids ), '%d' ) );
+
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$mappings = $wpdb->get_results(
+				$wpdb->prepare(
+				    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+					"SELECT attachment_id, optimized_id FROM {$this->table_name} WHERE status = 'completed' AND attachment_id IN ($img_ids_placeholder)",
+					$all_found_img_ids
+				)
+			);
+
+			foreach ( $mappings as $row ) {
+				$optimization_map[ $row->attachment_id ] = $row->optimized_id;
+			}
+		}
+
+		$rules = $this->get_replacement_rules( $optimization_map );
+
+		foreach ( $results as $post ) {
+			$content          = $post->post_content;
+			$original_content = $content;
+
+			foreach ( $rules as $rule_id => $rule ) {
+				if ( ! empty( $rule['pattern'] ) && is_callable( $rule['callback'] ) ) {
+					$content = preg_replace_callback( $rule['pattern'], $rule['callback'], $content );
+				}
+			}
+
+			if ( $content !== $original_content ) {
+			    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- We need to update the post content immediately after processing each post to ensure changes are saved.
+				$wpdb->update(
+					$wpdb->posts,
+					array( 'post_content' => $content ),
+					array( 'ID' => $post->ID ),
+					array( '%s' ),
+					array( '%d' )
+				);
+				++$replaced_count;
+			}
+		}
+
+		return new \WP_REST_Response(
+			array(
+				'current_page' => $page,
+				'processed'    => count( $post_ids ),
+				'replaced'     => $replaced_count,
+				'total_pages'  => $query->max_num_pages,
+				'is_last'      => $page >= $query->max_num_pages,
+			),
+			200
+		);
+	}
+
+		/**
+		 * Get the array of replacement rules.
+		 *
+		 * @param array $optimization_map Associative array [ Old_ID => New_ID ].
+		 * @return array Array of rules with 'pattern' and 'callback'.
+		 */
+	public function get_replacement_rules( $optimization_map ) {
+		$rules = array();
+
+		// RULE 1: Standard Gutenberg Image Blocks (JSON).
+		// Matches: <!-- wp:image {"id":123,...} -->.
+		$rules['gutenberg_block'] = array(
+			'pattern'  => '/<!-- wp:image (\{.*?\}) -->/',
+			'callback' => function ( $matches ) use ( $optimization_map ) {
+				$json_str = $matches[1];
+				$data     = json_decode( $json_str, true );
+
+				if ( json_last_error() !== JSON_ERROR_NONE || ! isset( $data['id'] ) ) {
+					return $matches[0];
+				}
+
+				$old_id = (int) $data['id'];
+
+				if ( isset( $optimization_map[ $old_id ] ) ) {
+					$data['id'] = (int) $optimization_map[ $old_id ];
+					return '<!-- wp:image ' . wp_json_encode( $data ) . ' -->';
+				}
+
+				return $matches[0];
+			},
+		);
+
+		// RULE 2: Standard HTML Image Tags.
+		// Matches: <img ... class="... wp-image-123 ..." ...>.
+		$rules['standard_img_tag'] = array(
+			'pattern'  => '/<img\s+([^>]+)>/i',
+			'callback' => function ( $matches ) use ( $optimization_map ) {
+				$full_tag = $matches[0];
+				$attrs    = $matches[1];
+
+				if ( ! preg_match( '/wp-image-(\d+)/', $attrs, $id_match ) ) {
+					return $full_tag;
+				}
+
+				$old_id = (int) $id_match[1];
+
+				if ( ! isset( $optimization_map[ $old_id ] ) ) {
+					return $full_tag;
+				}
+
+				$new_id = (int) $optimization_map[ $old_id ];
+
+				$width  = 0;
+				$height = 0;
+				if ( preg_match( '/width=["\'](\d+)["\']/', $attrs, $w_match ) ) {
+					$width = (int) $w_match[1];
+				}
+				if ( preg_match( '/height=["\'](\d+)["\']/', $attrs, $h_match ) ) {
+					$height = (int) $h_match[1];
+				}
+
+				$size_args = ( $width > 0 && $height > 0 ) ? array( $width, $height ) : 'full';
+
+				$new_src = wp_get_attachment_image_url( $new_id, $size_args );
+
+				if ( ! $new_src ) {
+					$new_src = wp_get_attachment_url( $new_id );
+				}
+
+				if ( ! $new_src ) {
+					return $full_tag;
+				}
+
+				$new_attrs = preg_replace( '/wp-image-' . $old_id . '/', 'wp-image-' . $new_id, $attrs );
+
+				$new_attrs = preg_replace( '/src=([\'"])(.*?)\1/', 'src=$1' . esc_url( $new_src ) . '$1', $new_attrs );
+
+				$new_attrs = preg_replace( '/\s*srcset=([\'"])(.*?)\1/', '', $new_attrs );
+
+				return '<img ' . $new_attrs . '>';
+			},
+		);
+
+		return $rules;
 	}
 }
