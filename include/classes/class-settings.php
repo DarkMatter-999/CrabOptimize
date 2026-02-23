@@ -136,6 +136,13 @@ class Settings {
 				'default'           => 10,
 			)
 		);
+
+		/**
+		 * Fires after all settings have been registered.
+		 *
+		 * @since 1.0.0
+		 */
+		do_action( 'dm_crab_optimize_settings_registered' );
 	}
 
 	/**
@@ -168,7 +175,16 @@ class Settings {
 	 */
 	public function sanitize_format( $value ) {
 		$allowed_formats = array( 'avif', 'webp' );
-		$format          = sanitize_text_field( $value );
+
+		/**
+		 * Filters the allowed image formats for optimization.
+		 *
+		 * @since 1.0.0
+		 * @param array $allowed_formats The allowed formats.
+		 */
+		$allowed_formats = apply_filters( 'dm_crab_optimize_allowed_formats', $allowed_formats );
+
+		$format = sanitize_text_field( $value );
 		return in_array( $format, $allowed_formats, true ) ? $format : 'avif';
 	}
 
@@ -245,6 +261,14 @@ class Settings {
 						<p class="description"><?php esc_html_e( 'Compression speed (0-10). Lower values produce smaller files but take longer. Default: 10', 'dm-crab-optimize' ); ?></p>
 					</td>
 					</tr>
+					<?php
+					/**
+					 * Fires at the bottom of the settings form table.
+					 *
+					 * @since 1.0.0
+					 */
+					do_action( 'dm_crab_optimize_settings_form_bottom' );
+					?>
 				</table>
 				<?php submit_button(); ?>
 				<a href="<?php echo esc_url( admin_url( "admin.php?page={$this->migration_page}" ) ); ?>" class="button button-secondary">

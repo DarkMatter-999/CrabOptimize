@@ -35,3 +35,10 @@ require_once DMCO_PLUGIN_PATH . 'include/helpers/autoloader.php';
 use DM_Crab_Optimize\Plugin;
 
 Plugin::get_instance();
+
+/**
+ * Fires when the CrabOptimize plugin has fully loaded.
+ *
+ * @since 1.0.0
+ */
+do_action( 'dm_crab_optimize_loaded' );

@@ -106,6 +106,15 @@ class Media {
 			} elseif ( 'image/webp' === $mime_type ) {
 				update_post_meta( $post_id, 'crab_optimized_format', 'webp' );
 			}
+
+			/**
+			 * Fires after optimization meta is saved for an attachment.
+			 *
+			 * @since 1.0.0
+			 * @param int    $post_id   The attachment ID.
+			 * @param string $mime_type The mime type of the attachment.
+			 */
+			do_action( 'dm_crab_optimize_meta_saved', $post_id, $mime_type );
 		}
 	}
 
@@ -124,7 +133,14 @@ class Media {
 		$response['meta']['is_crab_optimized']     = get_post_meta( $attachment->ID, 'is_crab_optimized', true );
 		$response['meta']['crab_optimized_format'] = get_post_meta( $attachment->ID, 'crab_optimized_format', true );
 
-		return $response;
+		/**
+		 * Filters the metadata exposed to the JS Media models.
+		 *
+		 * @since 1.0.0
+		 * @param array   $response   Array of prepared attachment data.
+		 * @param WP_Post $attachment Attachment object.
+		 */
+		return apply_filters( 'dm_crab_optimize_js_meta', $response, $attachment );
 	}
 
 	/**
@@ -143,10 +159,18 @@ class Media {
 		$mime_type = get_post_mime_type( $attachment_id );
 
 		if ( 'image/avif' === $mime_type || 'image/webp' === $mime_type ) {
-			return array();
+			$sizes = array();
 		}
 
-		return $sizes;
+		/**
+		 * Filters the image sizes to be generated for an attachment.
+		 *
+		 * @since 1.0.0
+		 * @param array $sizes         Array of image sizes that would be generated.
+		 * @param array $metadata      Attachment metadata array.
+		 * @param int   $attachment_id Attachment post ID.
+		 */
+		return apply_filters( 'dm_crab_optimize_disable_thumbnails', $sizes, $metadata, $attachment_id );
 	}
 
 	/**

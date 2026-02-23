@@ -104,6 +104,14 @@ class Assets {
 				'before'
 			);
 		}
+
+		/**
+		 * Fires after admin assets have been enqueued.
+		 *
+		 * @since 1.0.0
+		 * @param string $hook The current admin page hook suffix.
+		 */
+		do_action( 'dm_crab_optimize_admin_assets_enqueued', $hook );
 	}
 
 	/**
@@ -176,20 +184,28 @@ class Assets {
 
 		wp_enqueue_script( 'dm-crab-settings-main' );
 
+		$settings = array(
+			'saveUnoptimized'    => (int) get_option( 'dm_crab_optimize_keep_optimized', 0 ),
+			'showBadge'          => (int) get_option( 'dm_crab_optimize_show_badge', 0 ),
+			'imageSizes'         => wp_get_registered_image_subsizes(),
+			'generateThumbnails' => (int) get_option( 'dm_crab_optimize_generate_thumbnails', 0 ),
+			'format'             => (string) get_option( 'dm_crab_optimize_format', 'avif' ),
+			'quality'            => (float) get_option( 'dm_crab_optimize_quality', 70 ),
+			'qualityWebp'        => (float) get_option( 'dm_crab_optimize_quality_webp', 75 ),
+			'speed'              => (int) get_option( 'dm_crab_optimize_speed', 10 ),
+		);
+
+		/**
+		 * Filters the localized settings array passed to JavaScript.
+		 *
+		 * @since 1.0.0
+		 * @param array $settings The settings array.
+		 */
+		$settings = apply_filters( 'dm_crab_optimize_localized_settings', $settings );
+
 		wp_add_inline_script(
 			'dm-crab-settings-main',
-			'window.dmCrabSettingsMain = ' . wp_json_encode(
-				array(
-					'saveUnoptimized'    => (int) get_option( 'dm_crab_optimize_keep_optimized', 0 ),
-					'showBadge'          => (int) get_option( 'dm_crab_optimize_show_badge', 0 ),
-					'imageSizes'         => wp_get_registered_image_subsizes(),
-					'generateThumbnails' => (int) get_option( 'dm_crab_optimize_generate_thumbnails', 0 ),
-					'format'             => (string) get_option( 'dm_crab_optimize_format', 'avif' ),
-					'quality'            => (float) get_option( 'dm_crab_optimize_quality', 70 ),
-					'qualityWebp'        => (float) get_option( 'dm_crab_optimize_quality_webp', 75 ),
-					'speed'              => (int) get_option( 'dm_crab_optimize_speed', 10 ),
-				)
-			) . ';',
+			'window.dmCrabSettingsMain = ' . wp_json_encode( $settings ) . ';',
 			'before'
 		);
 	}

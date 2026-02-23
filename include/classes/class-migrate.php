@@ -140,16 +140,24 @@ class Migrate {
 		$paged    = $request->get_param( 'page' ) ? (int) $request->get_param( 'page' ) : 1;
 		$per_page = 50;
 
-		$query = new \WP_Query(
-			array(
-				'post_type'      => 'attachment',
-				'post_mime_type' => 'image',
-				'post_status'    => 'inherit',
-				'posts_per_page' => $per_page,
-				'paged'          => $paged,
-				'fields'         => 'ids',
-			)
+		$query_args = array(
+			'post_type'      => 'attachment',
+			'post_mime_type' => 'image',
+			'post_status'    => 'inherit',
+			'posts_per_page' => $per_page,
+			'paged'          => $paged,
+			'fields'         => 'ids',
 		);
+
+		/**
+		 * Filters the query arguments used to discover unoptimized images.
+		 *
+		 * @since 1.0.0
+		 * @param array $query_args The query arguments.
+		 */
+		$query_args = apply_filters( 'dm_crab_optimize_discovery_query_args', $query_args );
+
+		$query = new \WP_Query( $query_args );
 
 		$ids      = $query->posts;
 		$response = array();
@@ -223,6 +231,16 @@ class Migrate {
 			array( '%d', '%s', '%s' ),
 			array( '%d' )
 		);
+
+		/**
+		 * Fires when an unoptimized image is successfully linked to its new optimized counterpart.
+		 *
+		 * @since 1.0.0
+		 * @param int    $original_id  The original attachment ID.
+		 * @param int    $optimized_id The optimized attachment ID.
+		 * @param string $format       The optimization format.
+		 */
+		do_action( 'dm_crab_optimize_migration_linked', $original_id, $optimized_id, $format );
 	}
 
 	/**
@@ -355,16 +373,26 @@ class Migrate {
 		$per_page   = 50;
 		$post_types = array( 'post', 'page' );
 
-		$query = new \WP_Query(
-			array(
-				'post_type'      => $post_types,
-				'post_status'    => 'any',
-				'posts_per_page' => $per_page,
-				'paged'          => $page,
-				'fields'         => 'ids',
-				'no_found_rows'  => false,
-			)
+		$post_types = apply_filters( 'dm_crab_optimize_migration_replacement_post_types', $post_types );
+
+		$query_args = array(
+			'post_type'      => $post_types,
+			'post_status'    => 'any',
+			'posts_per_page' => $per_page,
+			'paged'          => $page,
+			'fields'         => 'ids',
+			'no_found_rows'  => false,
 		);
+
+		/**
+		 * Filters the query arguments used to find posts for content replacement.
+		 *
+		 * @since 1.0.0
+		 * @param array $query_args The query arguments.
+		 */
+		$query_args = apply_filters( 'dm_crab_optimize_replacement_query_args', $query_args );
+
+		$query = new \WP_Query( $query_args );
 
 		if ( empty( $query->posts ) ) {
 			return new \WP_REST_Response(
@@ -610,6 +638,6 @@ class Migrate {
 			},
 		);
 
-		return $rules;
+		return apply_filters( 'dm_crab_optimize_migration_replacement_rules', $rules, $optimization_map );
 	}
 }
