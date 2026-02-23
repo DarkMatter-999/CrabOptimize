@@ -193,6 +193,7 @@ class Assets {
 			'quality'            => (float) get_option( 'dm_crab_optimize_quality', 70 ),
 			'qualityWebp'        => (float) get_option( 'dm_crab_optimize_quality_webp', 75 ),
 			'speed'              => (int) get_option( 'dm_crab_optimize_speed', 10 ),
+			'excludedTypes'      => (string) get_option( 'dm_crab_optimize_excluded_types', '' ),
 		);
 
 		/**

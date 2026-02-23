@@ -104,6 +104,7 @@ declare global {
    qualityWebp?: number;
    speed?: number;
    imageSizes?: Record<string, any>;
+   excludedTypes?: string;
   };
  }
 }

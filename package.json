@@ -1,5 +1,5 @@
 {
-  "name": "plugin-skeleton",
+  "name": "crab-optimize",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {

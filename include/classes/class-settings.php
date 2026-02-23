@@ -137,6 +137,16 @@ class Settings {
 			)
 		);
 
+		register_setting(
+			'dm_crab_optimize_settings_group',
+			'dm_crab_optimize_excluded_types',
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => array( $this, 'sanitize_excluded_types' ),
+				'default'           => '',
+			)
+		);
+
 		/**
 		 * Fires after all settings have been registered.
 		 *
@@ -165,6 +175,26 @@ class Settings {
 	public function sanitize_speed( $value ) {
 		$speed = intval( $value );
 		return max( 0, min( 10, $speed ) );
+	}
+
+	/**
+	 * Sanitize excluded types setting - normalize the comma-separated list of file extensions.
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return string The sanitized, comma-separated list of file extensions.
+	 */
+	public function sanitize_excluded_types( $value ) {
+		$raw   = sanitize_text_field( $value );
+		$items = explode( ',', $raw );
+		$items = array_map(
+			function ( $item ) {
+				return strtolower( preg_replace( '/[^a-zA-Z0-9]/', '', trim( $item ) ) );
+			},
+			$items
+		);
+		$items = array_filter( $items );
+		$items = array_unique( $items );
+		return implode( ',', $items );
 	}
 
 	/**
@@ -259,6 +289,20 @@ class Settings {
 					<td>
 						<input type="number" id="dm_crab_optimize_speed" name="dm_crab_optimize_speed" min="0" max="10" value="<?php echo esc_attr( get_option( 'dm_crab_optimize_speed', 10 ) ); ?>" />
 						<p class="description"><?php esc_html_e( 'Compression speed (0-10). Lower values produce smaller files but take longer. Default: 10', 'dm-crab-optimize' ); ?></p>
+					</td>
+					</tr>
+					<tr valign="top">
+					<th scope="row"><label for="dm_crab_optimize_excluded_types"><?php esc_html_e( 'Excluded File Types', 'dm-crab-optimize' ); ?></label></th>
+					<td>
+						<input
+							type="text"
+							id="dm_crab_optimize_excluded_types"
+							name="dm_crab_optimize_excluded_types"
+							value="<?php echo esc_attr( get_option( 'dm_crab_optimize_excluded_types', '' ) ); ?>"
+							placeholder="gif,svg"
+							class="regular-text"
+						/>
+						<p class="description"><?php esc_html_e( 'Comma-separated list of file extensions to skip during optimization (e.g. gif,svg,png). Applies to both uploads and bulk migration.', 'dm-crab-optimize' ); ?></p>
 					</td>
 					</tr>
 					<?php

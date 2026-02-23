@@ -3,7 +3,7 @@
  * Uses the frontend WASM module to convert images, then uploads optimized versions
  */
 
-import { processFile } from './editor';
+import { processFile, isMimeTypeExcluded } from './editor';
 import { __, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 
@@ -380,7 +380,9 @@ class CrabMigration {
 						data.images as Array< any >
 					 ).filter(
 						( img ) =>
-							false === img.isOptimized && ! img.optimizedId
+							false === img.isOptimized &&
+							! img.optimizedId &&
+							! isMimeTypeExcluded( img.mime_type )
 					);
 					this.discoveredImages.push( ...filteredImages );
 					this.addLog(
@@ -502,6 +504,20 @@ class CrabMigration {
 				);
 
 				try {
+					if ( isMimeTypeExcluded( imageData.mime_type ) ) {
+						this.addLog(
+							sprintf(
+								/* translators: %s = image title */
+								__(
+									'Skipping %s (file type excluded from optimization).',
+									'dm-crab-optimize'
+								),
+								imageData.title
+							)
+						);
+						continue;
+					}
+
 					// Fetch the original image
 					const imageResponse = await fetch( imageData.url );
 					if ( ! imageResponse.ok ) {

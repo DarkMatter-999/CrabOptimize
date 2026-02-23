@@ -74,6 +74,90 @@ const getSpeedSetting = () => {
 	return 10;
 };
 
+/**
+ * Get the list of file extensions that should be excluded from optimization.
+ * Returns a lower-cased array of extensions (e.g. ['gif', 'svg', 'png']).
+ */
+export const getExcludedTypes = (): string[] => {
+	const excluded = window?.dmCrabSettingsMain?.excludedTypes;
+	if ( ! excluded ) {
+		return [];
+	}
+	return excluded
+		.split( ',' )
+		.map( ( t ) => t.trim().toLowerCase() )
+		.filter( Boolean );
+};
+
+/**
+ * Determine whether a given File should be skipped by the optimizer,
+ * based on the excluded file types setting.
+ *
+ * Checks the file extension derived from the filename first, then falls
+ * back to a best-effort extension extracted from the MIME type.
+ *
+ * @param file The File to inspect.
+ * @return `true` when the file should NOT be optimized.
+ */
+export const isFileExcluded = ( file: File ): boolean => {
+	const excluded = getExcludedTypes();
+	if ( ! excluded.length ) {
+		return false;
+	}
+
+	const nameParts = file.name.split( '.' );
+	if ( nameParts.length > 1 ) {
+		const ext = nameParts.pop()!.toLowerCase();
+		if ( excluded.includes( ext ) ) {
+			return true;
+		}
+	}
+
+	// Fallback: derive extension from MIME type (e.g. 'image/png' -> 'png').
+	// Special-case 'image/jpeg' -> 'jpg' so users can exclude with 'jpg'.
+	const mimeSubtype = file.type.split( '/' ).pop()?.toLowerCase();
+	if ( mimeSubtype ) {
+		const mimeExt = 'jpeg' === mimeSubtype ? 'jpg' : mimeSubtype;
+		if (
+			excluded.includes( mimeExt ) ||
+			excluded.includes( mimeSubtype )
+		) {
+			return true;
+		}
+	}
+
+	return false;
+};
+
+/**
+ * Determine whether a given MIME type string should be skipped by the
+ * optimizer, based on the excluded file types setting.
+ *
+ * Useful in contexts where only a MIME type is available (e.g. bulk migration).
+ *
+ * @param mimeType A MIME type string such as `image/gif` or `image/svg+xml`.
+ * @return `true` when the type should NOT be optimized.
+ */
+export const isMimeTypeExcluded = ( mimeType: string ): boolean => {
+	const excluded = getExcludedTypes();
+	if ( ! excluded.length ) {
+		return false;
+	}
+
+	// Derive a normalised extension from the subtype.
+	// 'image/jpeg' -> 'jpg', 'image/svg+xml' -> 'svg'
+	const subtype = mimeType.split( '/' ).pop()?.toLowerCase() ?? '';
+
+	let ext = subtype;
+	if ( 'jpeg' === subtype ) {
+		ext = 'jpg';
+	} else if ( subtype.includes( '+' ) ) {
+		ext = subtype.split( '+' )[ 0 ];
+	}
+
+	return excluded.includes( ext ) || excluded.includes( subtype );
+};
+
 const crabQueue = new CrabQueue();
 
 /**
@@ -104,7 +188,8 @@ export const processFile = (
 	if (
 		! ( file instanceof File ) ||
 		! file.type.startsWith( 'image/' ) ||
-		targetMimeType === file.type
+		targetMimeType === file.type ||
+		isFileExcluded( file )
 	) {
 		return Promise.resolve( file );
 	}
@@ -293,7 +378,11 @@ const mediaUploadMiddleware = async ( options: any, next: any ) => {
 		options.body instanceof FormData
 	) {
 		const file = options.body.get( 'file' );
-		if ( file instanceof File && ! keepUnoptimizedFile() ) {
+		if (
+			file instanceof File &&
+			! keepUnoptimizedFile() &&
+			! isFileExcluded( file )
+		) {
 			const format = getFormatSetting();
 			const processed = await processFile( file );
 
@@ -395,7 +484,8 @@ const setupUploaderEvents = ( uploader: PluploadInstance ) => {
 				native &&
 				native.type.startsWith( 'image/' ) &&
 				targetMimeType !== native.type &&
-				! f._crabOptimized
+				! f._crabOptimized &&
+				! isFileExcluded( native )
 			) {
 				queue.push( { plupload: f, native } );
 			}
