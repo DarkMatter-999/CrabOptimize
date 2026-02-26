@@ -1,4 +1,5 @@
 import apiFetch from '@wordpress/api-fetch';
+import { logger } from './logger';
 
 import { CrabQueue } from './crab-queue';
 import {
@@ -196,10 +197,8 @@ export const processFile = (
 
 	return crabQueue.add( async () => {
 		return new Promise( async ( resolve ) => {
-			console.log(
-				`🦀 CrabOptimize: Converting ${
-					file.name
-				} to ${ format.toUpperCase() }`
+			logger.log(
+				`Converting ${ file.name } to ${ format.toUpperCase() }`
 			);
 
 			try {
@@ -221,7 +220,7 @@ export const processFile = (
 					worker.terminate();
 
 					if ( e.data.error ) {
-						console.error( 'CrabOptimize: Failed', e.data.error );
+						logger.error( 'Failed', e.data.error );
 						resolve( file );
 						return;
 					}
@@ -243,12 +242,12 @@ export const processFile = (
 						type: mimeType,
 					} );
 
-					console.log( `Time: ${ timeLabel }` );
+					logger.log( `Time: ${ timeLabel }` );
 					resolve( convertedFile );
 				};
 
 				const handleError = ( err: ErrorEvent ) => {
-					console.error( 'CrabOptimize: Worker error', err.message );
+					logger.error( 'Worker error', err.message );
 					worker.removeEventListener( 'error', handleError );
 					worker.terminate();
 					resolve( file );
@@ -275,7 +274,7 @@ export const processFile = (
 					worker.postMessage( messageData );
 				}
 			} catch ( err ) {
-				console.error( 'CrabOptimize: Error preparing image', err );
+				logger.error( 'Error preparing image', err );
 				resolve( file );
 			}
 		} );
@@ -329,15 +328,11 @@ const generateThumbnails = async (
 			originalDims.w <= width &&
 			originalDims.h <= height
 		) {
-			console.log(
-				`🦀 CrabOptimize: Skipping ${ size.name } (too small)`
-			);
+			logger.log( `Skipping ${ size.name } (too small)` );
 			return null;
 		}
 
-		console.log(
-			`🦀 CrabOptimize: Generating ${ size.name } (${ width }x${ height })`
-		);
+		logger.log( `Generating ${ size.name } (${ width }x${ height })` );
 
 		const thumbFile = await processFile( file, width, height, size.crop );
 
@@ -387,8 +382,8 @@ const mediaUploadMiddleware = async ( options: any, next: any ) => {
 			const processed = await processFile( file );
 
 			const originalDims = await getImageDimensions( file );
-			console.log(
-				`🦀 CrabOptimize: Original dimensions ${ originalDims.w }x${ originalDims.h }`
+			logger.log(
+				`Original dimensions ${ originalDims.w }x${ originalDims.h }`
 			);
 
 			const imageSizes = window?.dmCrabSettingsMain?.imageSizes || {};
@@ -434,7 +429,7 @@ const hookLegacyPlupload = () => {
 	( window as any ).plupload.Uploader = function ( settings: any ) {
 		const instance = new OriginalUploader( settings );
 
-		console.log( '🦀 CrabOptimize: Hooked to Uploader' );
+		logger.log( 'Hooked to Uploader' );
 		setupUploaderEvents( instance );
 
 		return instance;
@@ -517,8 +512,8 @@ const setupUploaderEvents = ( uploader: PluploadInstance ) => {
 						const originalDims = await getImageDimensions(
 							item.native
 						);
-						console.log(
-							`🦀 CrabOptimize: Original dimensions ${ originalDims.w }x${ originalDims.h }`
+						logger.log(
+							`Original dimensions ${ originalDims.w }x${ originalDims.h }`
 						);
 
 						const imageSizes =
@@ -538,8 +533,8 @@ const setupUploaderEvents = ( uploader: PluploadInstance ) => {
 							};
 						}
 
-						console.warn(
-							`CrabOptimize: Skipping ${ item.native.name } due to conversion failure.`
+						logger.warn(
+							`Skipping ${ item.native.name } due to conversion failure.`
 						);
 						return { success: false };
 					} )
@@ -558,7 +553,7 @@ const setupUploaderEvents = ( uploader: PluploadInstance ) => {
 					}
 				} );
 			} catch ( err ) {
-				console.error( 'CrabOptimize: Critical error in queue', err );
+				logger.error( 'Critical error in queue', err );
 			} finally {
 				up._processing = false;
 				up.refresh();
@@ -578,7 +573,7 @@ const setupUploaderEvents = ( uploader: PluploadInstance ) => {
 export const initMediaInterceptor = () => {
 	apiFetch.use( mediaUploadMiddleware );
 	hookLegacyPlupload();
-	console.log( '🦀 CrabOptimize: Ready' );
+	logger.log( 'Ready' );
 };
 
 initMediaInterceptor();

@@ -2,6 +2,8 @@
 
 **CrabOptimize** is a next-generation WordPress image optimization plugin that leverages the power of WebAssembly (WASM) and Rust to convert images to modern formats (like AVIF and WebP) directly in the user's browser. By offloading the heavy lifting of image compression to the client side, CrabOptimize drastically reduces server load and boosts your site's performance.
 
+https://github.com/user-attachments/assets/be2f9faa-4c30-4d0d-925f-062a732c3948
+
 ## Features
 
 - **Client-Side Optimization:** Uses WebAssembly and Rust to process images in the browser before they are uploaded to the server.

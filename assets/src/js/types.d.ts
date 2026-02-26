@@ -105,6 +105,12 @@ declare global {
    speed?: number;
    imageSizes?: Record<string, any>;
    excludedTypes?: string;
+   debug?: boolean;
   };
  }
+ const process: {
+  env: {
+   NODE_ENV: string;
+  };
+ };
 }

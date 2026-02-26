@@ -4,6 +4,7 @@
  */
 
 import { processFile, isMimeTypeExcluded } from './editor';
+import { logger } from './logger';
 import { __, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 
@@ -372,7 +373,7 @@ class CrabMigration {
 				totalPages = data.total_pages || 1;
 
 				if ( data.images && Array.isArray( data.images ) ) {
-					console.log(
+					logger.log(
 						`Discovered ${ data.images.length } images on page ${ currentPage }`,
 						data.images
 					);
@@ -421,7 +422,7 @@ class CrabMigration {
 
 				await new Promise( ( resolve ) => setTimeout( resolve, 100 ) );
 			} catch ( error ) {
-				console.error( 'Discovery error:', error );
+				logger.error( 'Discovery error:', error );
 				this.addLog(
 					sprintf(
 						/* translators: %s = error message */
@@ -573,7 +574,7 @@ class CrabMigration {
 						},
 					} ).catch( () => {} );
 
-					console.error( 'Conversion error:', error );
+					logger.error( 'Conversion error:', error );
 					this.addLog(
 						sprintf(
 							/* translators: %s = error message */
@@ -634,7 +635,7 @@ class CrabMigration {
 
 			throw new Error( 'Upload succeeded but no ID returned' );
 		} catch ( error ) {
-			console.error( 'Upload error:', error );
+			logger.error( 'Upload error:', error );
 			throw error;
 		}
 	}
@@ -703,7 +704,7 @@ class CrabMigration {
 					currentPage++;
 				}
 			} catch ( error ) {
-				console.error( 'Replacement error:', error );
+				logger.error( 'Replacement error:', error );
 				this.addLog(
 					sprintf(
 						/* translators: %s = error message */
@@ -741,7 +742,7 @@ class CrabMigration {
 
 			return await response.json();
 		} catch ( error ) {
-			console.error( 'Failed to get migration status:', error );
+			logger.error( 'Failed to get migration status:', error );
 			return null;
 		}
 	}
