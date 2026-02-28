@@ -21,6 +21,7 @@ https://github.com/user-attachments/assets/be2f9faa-4c30-4d0d-925f-062a732c3948
    cd CrabOptimize
    npm install
    npm run build
+   wp-env start
    ```
 2. Navigate to the **Plugins** menu in your WordPress admin dashboard.
 3. Locate **CrabOptimize** and click **Activate**.

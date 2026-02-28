@@ -8,7 +8,7 @@ import { logger } from './logger';
 import { __, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 
-class CrabMigration {
+export class CrabMigration {
 	private root: HTMLElement | null;
 	private progressBar: HTMLElement | null = null;
 	private statusText: HTMLElement | null = null;
